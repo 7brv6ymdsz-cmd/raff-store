@@ -628,3 +628,21 @@ button.kpi { text-align: start; cursor: pointer; }
 .note-ic { flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--mist); display: grid; place-items: center; }
 .notice.launch { background: var(--amber-wash); color: var(--ink); box-shadow: var(--sh-sm); }
 .notice.launch .btn { flex: none; }
+.launch-card { margin-bottom: 12px; border: 2px solid var(--amber-wash); }
+.launch-card.ready { border-color: var(--green-wash); }
+.launch-bar { height: 8px; border-radius: 4px; background: var(--mist); overflow: hidden; margin-bottom: 14px; }
+.launch-bar i { display: block; height: 100%; background: var(--violet); border-radius: 4px; transition: width .4s var(--ease); }
+.launch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.launch-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.launch-list li + li { border-top: 1px solid var(--line); }
+.launch-list li > div { flex: 1; min-width: 0; }
+.launch-list b { display: block; font-size: 14px; font-weight: 600; }
+.launch-list b em { font-style: normal; font-size: 11px; font-weight: 500; color: var(--red); background: var(--red-wash); padding: 1px 8px; border-radius: var(--r-full); margin-inline-start: 6px; }
+.launch-list small { font-size: 12px; color: var(--muted); }
+.launch-list li.ok b { color: var(--muted); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--stone); }
+.lc-ic { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.ok .lc-ic { background: var(--green-wash); color: var(--green); }
+.ok .lc-ic .ic { width: 16px; height: 16px; }
+.crit .lc-ic { background: var(--red-wash); color: var(--red); }
+.opt .lc-ic { background: var(--mist); color: var(--muted); }
+.launch-list .btn { height: 36px; padding: 0 14px; font-size: 13px; flex: none; }

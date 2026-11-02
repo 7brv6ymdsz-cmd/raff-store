@@ -542,6 +542,34 @@
 
   /* ---------- Dashboard ---------- */
   let period = 30;
+  /* ---------- Launch checklist: can this store actually take and fulfil orders? ---------- */
+  function launchChecks() {
+    const st = state.settings, pay = st.payments || {}, ct = st.contact || {};
+    const real = state.products.filter((p) => !p.demo && !p.hidden);
+    const wa = String(st.whatsapp || '').replace(/\D/g, '');
+    const payOk = (pay.cod && pay.cod.on) || (pay.paypal && pay.paypal.on && pay.paypal.user) || (pay.bank && pay.bank.on && pay.bank.iban);
+    return [
+      { ok: !state.products.some((p) => p.demo), crit: true, t: 'مسح المنتجات التجريبية', d: 'الأمثلة الحالية بأسماء وتقييمات غير حقيقية.', act: '<button class="btn" type="button" data-act="clear-demo-products">امسحها</button>' },
+      { ok: real.length > 0, crit: true, t: 'منتجك الأول', d: real.length ? `${num(real.length)} منتج ظاهر بالمتجر.` : 'أضف منتج واحد على الأقل بصورته وسعره.', act: '<a class="btn" href="#products">أضف منتج</a>' },
+      { ok: CLOUD || wa.length >= 8, crit: !CLOUD, t: CLOUD ? 'رقم واتساب (اختياري مع السيرفر)' : 'رقم واتساب لاستلام الطلبات', d: CLOUD ? 'الطلبات بتوصل للوحة. الرقم بيسهّل تواصل الزبائن.' : 'بدون سيرفر، الطلب بيوصلك برسالة واتساب. بدون رقم ما في طريقة يوصلك الطلب.', act: '<a class="btn" href="#payments">أضف الرقم</a>' },
+      { ok: !!payOk, crit: true, t: 'طريقة دفع واحدة على الأقل', d: 'الدفع عند الاستلام، أو PayPal باسمك، أو تحويل بنكي برقم حسابك.', act: '<a class="btn" href="#payments">طرق الدفع</a>' },
+      { ok: !!(ct.email || ct.phone || wa), crit: false, t: 'معلومات التواصل', d: 'إيميل أو هاتف بصفحة «تواصل معنا»، ليثق فيك الزبون.', act: '<a class="btn" href="#settings">أضف</a>' },
+      { ok: !!(st.pages && (st.pages.returns || st.pages.shipping)), crit: false, t: 'سياسة التوصيل والإرجاع بكلامك', d: 'في نص افتراضي جاهز، بس الأفضل تكتب شروطك الحقيقية.', act: '<a class="btn" href="#settings">اكتبها</a>' },
+      { ok: CLOUD, crit: false, t: 'ربط السيرفر (مجاني)', d: 'لحسابات الزبائن والطلبات الفورية والتقييمات ونظام الرسائل.', act: '<a class="btn" href="#server">اربط</a>' },
+      { ok: !dirty(), crit: true, t: 'نشر آخر التعديلات', d: CLOUD ? 'محفوظ مباشرة على السيرفر.' : 'تعديلاتك محفوظة عندك بس لحد ما تنشرها.', act: '<a class="btn" href="#publish">انشر</a>' },
+    ];
+  }
+  function launchCard() {
+    const c = launchChecks();
+    const done = c.filter((x) => x.ok).length, critLeft = c.filter((x) => x.crit && !x.ok).length;
+    if (done === c.length) return '';
+    return `<section class="card launch-card ${critLeft ? 'blocked' : 'ready'}">
+      <div class="card-head"><h2>${critLeft ? `قبل ما تبيع: باقي ${num(critLeft)} ${critLeft === 1 ? 'خطوة أساسية' : 'خطوات أساسية'}` : 'متجرك جاهز للبيع ✓'}</h2><span class="muted">${num(done)} من ${num(c.length)}</span></div>
+      <div class="launch-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${c.length}" aria-valuenow="${done}"><i style="width:${(done / c.length) * 100}%"></i></div>
+      <ul class="launch-list">${c.map((x) => `<li class="${x.ok ? 'ok' : x.crit ? 'crit' : 'opt'}"><span class="lc-ic">${x.ok ? ic('check') : x.crit ? '!' : '·'}</span><div><b>${x.t}${!x.ok && x.crit ? ' <em>أساسي</em>' : ''}</b><small>${x.d}</small></div>${x.ok ? '' : x.act}</li>`).join('')}</ul>
+    </section>`;
+  }
+
   VIEWS.dashboard = () => {
     setActions(CLOUD ? `<button class="btn" type="button" data-act="reload">${ic('refresh')}<span>تحديث</span></button>` : `<button class="btn" type="button" data-act="import">${ic('import')}<span>استيراد طلب</span></button>`);
     const now = Date.now(), day = 864e5;
@@ -571,9 +599,8 @@
       ${dirty() ? `<a class="notice" href="#publish">${ic('publish')}<span><b>عندك تعديلات ما انتشرت لسا.</b> الزبائن بيشوفوا النسخة القديمة لحتى تنشر.</span><em>انشر هلّق</em></a>` : ''}
       ${CLOUD && state.conversations.some((c) => c.unread_admin && c.status !== 'closed') ? `<a class="notice" href="#messages">${ic('messages')}<span><b>عندك ${num(state.conversations.filter((c) => c.unread_admin && c.status !== 'closed').length)} رسالة جديدة من الزبائن.</b> الرد السريع بيفرق.</span><em>فتح الرسائل</em></a>` : ''}
       ${CLOUD && state.questions.some((q) => q.status === 'pending') ? `<a class="notice soft" href="#questions">${ic('questions')}<span><b>${num(state.questions.filter((q) => q.status === 'pending').length)} سؤال عن المنتجات</b> بانتظار جوابك.</span><em>جاوب</em></a>` : ''}
-      ${state.products.some((p) => p.demo) ? `<div class="notice launch">${ic('products')}<span><b>المنتجات الحالية أمثلة للعرض فقط</b> (أسماء وتقييمات غير حقيقية). امسحها قبل ما تنشر المتجر للناس، وأضف منتجاتك.</span><button class="btn" type="button" data-act="clear-demo-products">امسح الأمثلة وابدأ</button></div>` : ''}
+      ${launchCard()}
       ${state.offerImport ? `<a class="notice" href="#server">${ic('server')}<span><b>السيرفر جاهز بس فاضي.</b> انقل منتجاتك وإعداداتك الحالية إليه بكبسة وحدة.</span><em>نقل البيانات</em></a>` : ''}
-      ${!CLOUD && !state.settings.whatsapp ? `<a class="notice soft" href="#payments">${ic('whatsapp')}<span><b>ما حطيت رقم واتساب.</b> بدونه الزبون ما فيه يبعتلك الطلب بكبسة وحدة.</span><em>أضف الرقم</em></a>` : ''}
       <div class="seg" role="group" aria-label="الفترة">
         ${[[7, '٧ أيام'], [30, '٣٠ يوم'], [90, '٣ أشهر'], [0, 'الكل']].map(([v, t]) => `<button type="button" data-period="${v}" aria-pressed="${period === v}">${t}</button>`).join('')}
       </div>

@@ -12,8 +12,8 @@ test('launch: clear the sample products, add a real product with a photo, store 
   await page.click('#lockSubmit');
   await expect(page.locator('#app')).toBeVisible({ timeout: 20_000 });
 
-  await expect(page.locator('.notice.launch')).toBeVisible();
-  await page.click('[data-act="clear-demo-products"]');
+  await expect(page.locator('.launch-card.blocked')).toBeVisible();
+  await page.click('.launch-card [data-act="clear-demo-products"]');
   await page.click('#confirmOk');
   await expect(page).toHaveURL(/#products$/);
   await expect(page.locator('.pc[data-product]')).toHaveCount(0);

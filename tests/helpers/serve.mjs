@@ -10,7 +10,8 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (!url.pathname.startsWith('/raff-store/')) { res.writeHead(302, { location: '/raff-store/' }); return res.end(); }
+  if (url.pathname === '/') { res.writeHead(302, { location: '/raff-store/' }); return res.end(); }
+  if (!url.pathname.startsWith('/raff-store/')) { res.writeHead(404); return res.end('Not found'); }
   let rel = decodeURIComponent(url.pathname.slice('/raff-store/'.length));
   if (rel === '' || rel.endsWith('/')) rel += 'index.html';
   const file = path.resolve(ROOT, rel);
