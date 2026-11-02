@@ -5,7 +5,7 @@
   "name": "رَفّ",
   "tagline": "متاجر صغيرة، أشياء تحبها",
   "banner": "توصيل مجاني فوق ٥٠$",
-  "bannerSub": "من أكثر من ١٢٠ متجراً مستقلاً",
+  "bannerSub": "الدفع عند الاستلام متاح",
   "currency": "$",
   "currencyCode": "USD",
   "shipping": {
@@ -77,7 +77,8 @@
    "desc": "مشغول باليد على الدولاب، بطبقة زجاج تحفظ حرارة قهوتك الصباحية. كل قطعة تختلف قليلاً عن أختها.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 2,
@@ -106,7 +107,8 @@
       "44"
      ]
     }
-   ]
+   ],
+   "demo": true
   },
   {
    "id": 3,
@@ -132,7 +134,8 @@
       "أسود"
      ]
     }
-   ]
+   ],
+   "demo": true
   },
   {
    "id": 4,
@@ -149,7 +152,8 @@
    "desc": "غطاء من الكتّان الطبيعي وقاعدة نحاسية، يعطي ضوءاً دافئاً للقراءة قبل النوم.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 5,
@@ -166,7 +170,8 @@
    "desc": "شجرة زيتون قزمة في أصيص طين، تحب الشمس وتحتمل نسيان الري أحياناً.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 6,
@@ -183,7 +188,8 @@
    "desc": "عزل للضوضاء وبطارية تدوم ٣٠ ساعة، بوسائد ناعمة تريح الأذن في الرحلات الطويلة.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 7,
@@ -200,7 +206,8 @@
    "desc": "تركيبة خفيفة تمنح البشرة إشراقة، بدون عطور ومناسبة للبشرة الحساسة.",
    "stock": 3,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 8,
@@ -217,7 +224,8 @@
    "desc": "خشب جوز صلب بتشطيب زيتي، مصنوع ليعيش معك عشرين سنة على الأقل.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 9,
@@ -234,7 +242,8 @@
    "desc": "ميناء بسيط بلا أرقام وحزام جلد طبيعي يكتسب لوناً أجمل مع الأيام.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 10,
@@ -251,7 +260,8 @@
    "desc": "شمع صويا وعطر عود دافئ، تحترق نحو ٤٠ ساعة في جرّة زجاجية تعيد استخدامها.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 11,
@@ -268,7 +278,8 @@
    "desc": "طين محلي غير مزجّج بملمس خشن، جميلة فارغة وأجمل مع غصن زيتون.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 12,
@@ -285,7 +296,8 @@
    "desc": "إطار دائري خفيف وعدسات تحمي من الأشعة فوق البنفسجية بالكامل.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 13,
@@ -311,7 +323,8 @@
       "بيج"
      ]
     }
-   ]
+   ],
+   "demo": true
   },
   {
    "id": 14,
@@ -339,7 +352,8 @@
       "XL"
      ]
     }
-   ]
+   ],
+   "demo": true
   },
   {
    "id": 15,
@@ -356,7 +370,8 @@
    "desc": "زبدة الشيا وزيت الزيتون، يمتصّ بسرعة ولا يترك أثراً دهنياً.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 16,
@@ -373,7 +388,8 @@
    "desc": "رفيق المكتب الذي لا يشتكي. ريّة واحدة كل أسبوعين تكفيه.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 17,
@@ -390,7 +406,8 @@
    "desc": "صوت دافئ بحجم الكف، مقاوم للماء ويعمل ١٢ ساعة بشحنة واحدة.",
    "stock": 25,
    "featured": true,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 18,
@@ -407,7 +424,8 @@
    "desc": "أرغان مغربي معصور على البارد، بضع قطرات تكفي لشعر لامع وناعم.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   },
   {
    "id": 19,
@@ -436,7 +454,8 @@
       "44"
      ]
     }
-   ]
+   ],
+   "demo": true
   },
   {
    "id": 20,
@@ -453,7 +472,8 @@
    "desc": "شمع العسل وزيت اللوز، ترطيب يدوم طوال اليوم بلمسة لون خفيفة.",
    "stock": 25,
    "featured": false,
-   "hidden": false
+   "hidden": false,
+   "demo": true
   }
  ]
 }

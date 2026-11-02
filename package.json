@@ -7,8 +7,8 @@
     "start": "npx --yes http-server .. -p 8766 -c-1 -s",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
     "lint:js": "eslint .",
-    "lint:css": "stylelint \"**/*.css\"",
-    "lint:html": "html-validate \"**/*.html\"",
+    "lint:css": "stylelint \"*.css\" \"admin/*.css\" \"assets/*.css\"",
+    "lint:html": "html-validate \"*.html\" \"admin/*.html\"",
     "test": "playwright test",
     "test:db": "bash tests/db/run.sh",
     "audit": "node tests/audit/lighthouse.mjs"

@@ -571,6 +571,7 @@
       ${dirty() ? `<a class="notice" href="#publish">${ic('publish')}<span><b>عندك تعديلات ما انتشرت لسا.</b> الزبائن بيشوفوا النسخة القديمة لحتى تنشر.</span><em>انشر هلّق</em></a>` : ''}
       ${CLOUD && state.conversations.some((c) => c.unread_admin && c.status !== 'closed') ? `<a class="notice" href="#messages">${ic('messages')}<span><b>عندك ${num(state.conversations.filter((c) => c.unread_admin && c.status !== 'closed').length)} رسالة جديدة من الزبائن.</b> الرد السريع بيفرق.</span><em>فتح الرسائل</em></a>` : ''}
       ${CLOUD && state.questions.some((q) => q.status === 'pending') ? `<a class="notice soft" href="#questions">${ic('questions')}<span><b>${num(state.questions.filter((q) => q.status === 'pending').length)} سؤال عن المنتجات</b> بانتظار جوابك.</span><em>جاوب</em></a>` : ''}
+      ${state.products.some((p) => p.demo) ? `<div class="notice launch">${ic('products')}<span><b>المنتجات الحالية أمثلة للعرض فقط</b> (أسماء وتقييمات غير حقيقية). امسحها قبل ما تنشر المتجر للناس، وأضف منتجاتك.</span><button class="btn" type="button" data-act="clear-demo-products">امسح الأمثلة وابدأ</button></div>` : ''}
       ${state.offerImport ? `<a class="notice" href="#server">${ic('server')}<span><b>السيرفر جاهز بس فاضي.</b> انقل منتجاتك وإعداداتك الحالية إليه بكبسة وحدة.</span><em>نقل البيانات</em></a>` : ''}
       ${!CLOUD && !state.settings.whatsapp ? `<a class="notice soft" href="#payments">${ic('whatsapp')}<span><b>ما حطيت رقم واتساب.</b> بدونه الزبون ما فيه يبعتلك الطلب بكبسة وحدة.</span><em>أضف الرقم</em></a>` : ''}
       <div class="seg" role="group" aria-label="الفترة">
@@ -909,7 +910,7 @@
       $('#prevStore').textContent = f.store.value;
       const pr = +f.price.value || 0, cmp = +f.compare.value || 0;
       $('#prevPrice').innerHTML = `${money(pr)}${cmp > pr ? ` <s>${money(cmp)}</s>` : ''}`;
-      $('#galleryEd').innerHTML = p.images.map((src, i) => `<div class="g-item${i === 0 ? ' main' : ''}"><span style="--bg:${S.hex(p.bg, '#efe8dc')}">${art({ img: src })}</span>
+      $('#galleryEd').innerHTML = p.images.map((src, i) => `<div class="g-item${i === 0 ? ' is-cover' : ''}"><span style="--bg:${S.hex(p.bg, '#efe8dc')}">${art({ img: src })}</span>
         <div class="g-act">${i > 0 ? `<button type="button" data-gmain="${i}" title="اجعلها الأساسية">${ic('star')}</button>` : ''}<button type="button" data-gdel="${i}" title="حذف">${ic('trash')}</button></div></div>`).join('');
       $('#artTools').hidden = p.images.length > 0;
     };
@@ -1750,7 +1751,7 @@
         state.categories = (src.categories || []).map((c) => ({ ...c }));
         await cloudApi.saveCategories([]);
         await cloudApi.saveSettings();
-        const rows = (src.products || []).map((p) => ({ ...D.toRow({ ...p, images: S.safeImg(p.img) && !String(p.img).startsWith('data:') ? [p.img] : [] }), rating: +p.rating || 0, reviews_count: +p.reviews || 0 }));
+        const rows = (src.products || []).filter((p) => !p.demo).map((p) => ({ ...D.toRow({ ...p, images: S.safeImg(p.img) && !String(p.img).startsWith('data:') ? [p.img] : [] }), rating: +p.rating || 0, reviews_count: +p.reviews || 0 }));
         for (let i = 0; i < rows.length; i += 50) must(await sb.from('products').insert(rows.slice(i, i + 50)));
       }, 'انتقلت البيانات للسيرفر');
     } catch { return; }
@@ -1855,6 +1856,16 @@
       case 'close-sheet': closeSheet(); break;
       case 'new-product': editProduct(0); break;
       case 'new-coupon': editCoupon(null); break;
+      case 'clear-demo-products': {
+        const demo = state.products.filter((p) => p.demo);
+        confirmBox(`تمسح ${num(demo.length)} منتج تجريبي؟`, 'بتنمسح الأمثلة بس. منتجاتك (إذا ضفت شي) والتصنيفات والإعدادات بتضل. بعدها اكبس «نشر التغييرات».', 'امسح الأمثلة', async () => {
+          if (CLOUD) { try { await cloudDo(async () => { for (const p of demo) await cloudApi.deleteProduct(p.id); }); } catch { return; } }
+          state.products = state.products.filter((p) => !p.demo); save();
+          toast('انمسحت الأمثلة. أضف منتجك الأول!');
+          location.hash = '#products';
+        });
+        break;
+      }
       case 'bell': openBell(); break;
       case 'nav-activity': VIEWS.activity(); break;
       case 'delete-conv': {

@@ -289,7 +289,7 @@ a.kpi:hover { transform: translateY(-2px); }
 .modal-head h2 { font-size: 20px; font-weight: 600; }
 .modal-foot { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 4px; }
 .editor { display: flex; flex-direction: column; gap: 16px; }
-.editor-grid { display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+.editor-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; }
 .editor-preview { display: flex; flex-direction: column; gap: 12px; }
 .prev-card { background: var(--white); border-radius: 26px; padding: 8px 8px 14px; box-shadow: var(--sh-card); display: flex; flex-direction: column; gap: 2px; }
 .prev-img { display: block; aspect-ratio: 1; border-radius: 19px; overflow: hidden; background: var(--bg); margin-bottom: 8px; }
@@ -485,12 +485,12 @@ a.kpi:hover { transform: translateY(-2px); }
 .tiny { font-size: 12px; }
 .sums .disc span, .sums .disc b { color: var(--green); }
 
-.gallery-ed { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gallery-ed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .gallery-ed:empty { display: none; }
-.g-item { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
-.g-item > span { display: block; width: 100%; height: 100%; background: var(--bg); }
+.g-item { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; min-width: 0; }
+.g-item > span { position: absolute; inset: 0; display: block; background: var(--bg); }
 .g-item img, .g-item svg { width: 100%; height: 100%; object-fit: cover; display: block; }
-.g-item.main { box-shadow: 0 0 0 2px var(--ink); }
+.g-item.is-cover { box-shadow: 0 0 0 2px var(--ink); }
 .g-act { position: absolute; inset: auto 4px 4px auto; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
 .g-item:hover .g-act, .g-item:focus-within .g-act { opacity: 1; }
 .g-act button { width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.95); display: grid; place-items: center; box-shadow: var(--sh-sm); }
@@ -626,3 +626,5 @@ button.kpi { text-align: start; cursor: pointer; }
 .notes b { display: block; font-size: 14px; }
 .notes small { font-size: 12px; color: var(--muted); }
 .note-ic { flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--mist); display: grid; place-items: center; }
+.notice.launch { background: var(--amber-wash); color: var(--ink); box-shadow: var(--sh-sm); }
+.notice.launch .btn { flex: none; }

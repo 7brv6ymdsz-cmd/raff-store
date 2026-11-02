@@ -66,9 +66,11 @@
     ];
     const m = matchMedia('(max-width: 720px)').matches;
     $('#constellation').querySelectorAll('.float').forEach((n) => n.remove());
+    // fill the centre first so a store with one or two products still has a hero on phones
+    const ORDER = [2, 1, 3, 0, 4];
     $('#constellation').insertAdjacentHTML('afterbegin', heroList.map((p, i) => {
-      const s = SLOTS[i];
-      return `<div class="float" data-slot="${i + 1}" style="--x:${m ? s.mx : s.x};--y:${m ? s.my : s.y};--w:${m ? s.mw : s.w};--d:${s.d}">${card(p, true)}</div>`;
+      const s = SLOTS[ORDER[i]];
+      return `<div class="float" data-slot="${ORDER[i] + 1}" style="--x:${m ? s.mx : s.x};--y:${m ? s.my : s.y};--w:${m ? s.mw : s.w};--d:${s.d}">${card(p, true)}</div>`;
     }).join(''));
 
     $('#pills').innerHTML = CATS.filter((c) => P.some((p) => p.cat === c.id)).map((c) =>
