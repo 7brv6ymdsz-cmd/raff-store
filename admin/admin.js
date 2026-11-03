@@ -351,7 +351,7 @@
       },
       categories: [], products: [],
     };
-    const s = { ...base, ...(cat || {}), orders: [], publishedHash: null, created: Date.now() };
+    const s = { ...base, ...(cat || {}), orders: [], publishedHash: null, created: Date.now(), syncedUpdated: cat && cat.updated };
     delete s.isPreview; delete s.v; delete s.updated;
     return s;
   }
@@ -380,11 +380,32 @@
     if (CLOUD) { startPolling(); } else {
       const n = syncLocalOrders(true);
       if (n) toast(`انضاف ${num(n)} طلب من هالجهاز`);
+      checkPublished();
     }
     $('#publishBtn').hidden = CLOUD;
     $('#cloudBadge').hidden = !CLOUD;
     route();
   }
+
+  // The admin keeps its own copy on this device. When the published store is newer (published from another
+  // device, or updated on GitHub), take it over automatically if nothing here is unpublished, otherwise ask.
+  let newerCatalog = null;
+  function adoptCatalog(cat) {
+    const { coupons, ...settings } = cat.settings || {}; void coupons;
+    state.settings = { ...state.settings, ...settings };
+    state.categories = cat.categories || [];
+    state.products = cat.products || [];
+    migrate();
+    state.publishedHash = catalogHash(); state.syncedUpdated = cat.updated; newerCatalog = null; save();
+  }
+  async function checkPublished() {
+    let cat; try { cat = await S.loadCatalog('../'); } catch { return; }
+    if (!cat || cat.isPreview || !cat.updated || cat.updated === state.syncedUpdated) return;
+    if (state.syncedUpdated && cat.updated < state.syncedUpdated) return;
+    if (!dirty()) { adoptCatalog(cat); toast('انحمّلت آخر نسخة منشورة من المتجر'); route(); return; }
+    newerCatalog = cat; route();
+  }
+  const newerNotice = () => (newerCatalog ? `<div class="notice">${ic('refresh')}<span><b>في نسخة أحدث منشورة من المتجر.</b> عندك تعديلات هون ما انتشرت، فاختار: تحمّل المنشورة (بتروح تعديلاتك) أو تكمّل وتنشر تعديلاتك فوقها.</span><button class="btn" type="button" data-act="adopt-published">حمّل المنشورة</button></div>` : '');
 
   /* ---------- Router ---------- */
   const NAV = [
@@ -598,6 +619,7 @@
 
     const hasOrders = state.orders.length > 0;
     $('#view').innerHTML = `
+      ${newerNotice()}
       ${dirty() ? `<a class="notice" href="#publish">${ic('publish')}<span><b>عندك تعديلات ما انتشرت لسا.</b> الزبائن بيشوفوا النسخة القديمة لحتى تنشر.</span><em>انشر هلّق</em></a>` : ''}
       ${CLOUD && state.conversations.some((c) => c.unread_admin && c.status !== 'closed') ? `<a class="notice" href="#messages">${ic('messages')}<span><b>عندك ${num(state.conversations.filter((c) => c.unread_admin && c.status !== 'closed').length)} رسالة جديدة من الزبائن.</b> الرد السريع بيفرق.</span><em>فتح الرسائل</em></a>` : ''}
       ${CLOUD && state.questions.some((q) => q.status === 'pending') ? `<a class="notice soft" href="#questions">${ic('questions')}<span><b>${num(state.questions.filter((q) => q.status === 'pending').length)} سؤال عن المنتجات</b> بانتظار جوابك.</span><em>جاوب</em></a>` : ''}
@@ -2002,11 +2024,14 @@ window.RAFF_CONFIG = {
       case 'clear-demo': state.orders = state.orders.filter((o) => !o.demo); save(); toast('انمسحت الطلبات التجريبية'); route(); break;
       case 'wipe': confirmBox('تمسح كل شي؟', 'رح تنمسح الطلبات والتعديلات غير المنشورة من هالجهاز. المتجر المنشور ما بيتأثر. خود نسخة احتياطية قبل.', 'امسح كل شي', () => { ls.del(KEY); location.reload(); }); break;
       case 'preview': ls.set('raff.preview', publicCatalog()) ? window.open('../?preview=1', '_blank', 'noopener') : toast('ما في مساحة كافية للمعاينة'); break;
-      case 'download':
-        download('store.json', JSON.stringify(publicCatalog(), null, 1));
-        state.publishedHash = catalogHash(); state.publishedAt = Date.now(); save();
+      case 'adopt-published': if (newerCatalog) confirmBox('تحمّل النسخة المنشورة؟', 'المنتجات والإعدادات هون رح تتبدل بالنسخة المنشورة، والتعديلات غير المنشورة بتروح. الطلبات ما بتتأثر.', 'حمّلها', () => { adoptCatalog(newerCatalog); toast('انحمّلت النسخة المنشورة'); route(); }); break;
+      case 'download': {
+        const cat = publicCatalog();
+        download('store.json', JSON.stringify(cat, null, 1));
+        state.publishedHash = catalogHash(); state.publishedAt = Date.now(); state.syncedUpdated = cat.updated; save();
         toast('نزل الملف. هلّق ارفعه على GitHub.');
         VIEWS.publish();
+      }
         break;
     }
   });
