@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 
 const PAGES = ['', '#/p/14', '#/track', '#/login', '#/signup', '#/wishlist', '#/orders', '#/about', '#/shipping', '#/returns', '#/faq', '#/contact', '#/terms', 'admin/'];
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 
 const readDownload = async (dl) => { const st = await dl.createReadStream(); const parts = []; for await (const c of st) parts.push(c); return Buffer.concat(parts).toString('utf8'); };
 

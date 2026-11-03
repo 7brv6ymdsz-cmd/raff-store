@@ -23,15 +23,17 @@
   let appliedCoupon = null;
 
   /* ---------- Components ---------- */
-  const inStock = (p) => !(p.stock <= 0);
+  const isDigital = S.isDigital;
+  const inStock = (p) => isDigital(p) || !(p.stock <= 0);
+  const digiTag = (p) => (isDigital(p) ? `<span class="tag digi">${esc(p.format || 'رقمي')}</span>` : '');
   const hasOpts = (p) => Array.isArray(p.options) && p.options.some((o) => o && o.values && o.values.length);
   const priceHTML = (p) => `<span class="price">${money(p.price)}${p.compare > p.price ? ` <s>${money(p.compare)}</s>` : ''}</span>`;
   const href = (p) => `#/p/${p.id}`;
   const card = (p, mini = false) => `
     <article class="pcard${mini ? ' mini' : ''}${inStock(p) ? '' : ' soldout'}">
-      <a class="pcard-img" href="${href(p)}" style="--bg:${S.hex(p.bg, '#efe8dc')}" aria-label="${esc(p.name)}">${art(p)}${inStock(p) ? '' : '<span class="tag">نفد</span>'}${p.compare > p.price && inStock(p) ? `<span class="tag sale">−${num(Math.round((1 - p.price / p.compare) * 100))}٪</span>` : ''}</a>
+      <a class="pcard-img" href="${href(p)}" style="--bg:${S.hex(p.bg, '#efe8dc')}" aria-label="${esc(p.name)}">${art(p)}${digiTag(p)}${inStock(p) ? '' : '<span class="tag">نفد</span>'}${p.compare > p.price && inStock(p) ? `<span class="tag sale">−${num(Math.round((1 - p.price / p.compare) * 100))}٪</span>` : ''}</a>
       ${mini ? '' : `<button class="heart" type="button" data-save="${p.id}" aria-pressed="${D.wishlist.has(p.id)}" aria-label="أضف ${esc(p.name)} للمفضلة">${heartSVG}</button>
-      <button class="add" type="button" data-add="${p.id}" ${inStock(p) ? '' : 'disabled'} aria-label="${hasOpts(p) ? 'اختار المواصفات' : `أضف ${esc(p.name)} إلى السلة`}">${plusSVG}</button>`}
+      <button class="add" type="button" data-add="${p.id}" ${inStock(p) ? '' : 'disabled'} aria-label="${hasOpts(p) || S.safeUrl(p.buyUrl) ? `اشترِ ${esc(p.name)}` : `أضف ${esc(p.name)} إلى السلة`}">${plusSVG}</button>`}
       <a class="pcard-meta" href="${href(p)}">
         <h3>${esc(p.name)}</h3>
         <p class="store">${esc(p.store)}</p>
@@ -55,6 +57,11 @@
     $('#bannerTitle').textContent = CFG.banner || '';
     $('#bannerSub').textContent = CFG.bannerSub || '';
     $('.banner').hidden = !CFG.banner;
+    if (P.length && P.every(isDigital)) {
+      $$('a[href="#/shipping"]').forEach((a) => { if (a.textContent.trim() === 'التوصيل') a.textContent = 'التسليم والتحميل'; });
+      $$('a[href="#/returns"]').forEach((a) => { if (a.textContent.trim() === 'الإرجاع') a.textContent = 'الاسترداد'; });
+      $('.banner').setAttribute('aria-label', 'تفاصيل التسليم');
+    }
 
     const heroList = P.filter((p) => p.featured).concat(P.filter((p) => !p.featured)).slice(0, 5);
     const SLOTS = [
@@ -176,7 +183,8 @@
   const totals = () => {
     const sub = Math.round(cartLines().reduce((s, l) => s + l.p.price * l.qty, 0) * 100) / 100;
     const sh = CFG.shipping || {};
-    const ship = sub === 0 ? 0 : (sh.freeOver > 0 && sub >= sh.freeOver ? 0 : +sh.fee || 0);
+    const physSub = cartLines().filter((l) => !isDigital(l.p)).reduce((s, l) => s + l.p.price * l.qty, 0);
+    const ship = physSub === 0 ? 0 : (sh.freeOver > 0 && sub >= sh.freeOver ? 0 : +sh.fee || 0);
     let discount = 0;
     if (appliedCoupon && appliedCoupon.ok) {
       discount = appliedCoupon.kind === 'percent' ? Math.round(sub * Math.min(appliedCoupon.value, 100)) / 100
@@ -195,17 +203,19 @@
     $('#cartList').innerHTML = lines.map((l) => `<li class="cart-item">
         <a class="cart-thumb" href="${href(l.p)}" style="--bg:${S.hex(l.p.bg, '#efe8dc')}">${art(l.p)}</a>
         <div class="cart-info"><b>${esc(l.p.name)}</b><small>${esc(optsText(l.options) || l.p.store)}</small>
-          <div class="qty"><button type="button" data-dec="${esc(l.key)}" aria-label="إنقاص">−</button><span>${num(l.qty)}</span><button type="button" data-inc="${esc(l.key)}" aria-label="زيادة">+</button></div>
+          ${isDigital(l.p) ? `<div class="qty digi"><span>${esc(l.p.format || 'رقمي')} · تحميل</span><button type="button" data-dec="${esc(l.key)}" aria-label="إزالة">×</button></div>` : `<div class="qty"><button type="button" data-dec="${esc(l.key)}" aria-label="إنقاص">−</button><span>${num(l.qty)}</span><button type="button" data-inc="${esc(l.key)}" aria-label="زيادة">+</button></div>`}
         </div>
         <span class="cart-price">${money(l.p.price * l.qty)}</span>
       </li>`).join('');
     $('#cartEmpty').hidden = count > 0;
     $('#cartFoot').hidden = count === 0;
     $('#cartSub').textContent = money(sub);
-    $('#cartShip').textContent = ship ? money(ship) : 'مجاني';
+    const dOnly = allDigital();
+    $('#cartShip').previousElementSibling.textContent = dOnly ? 'التسليم' : 'التوصيل';
+    $('#cartShip').textContent = dOnly ? 'رقمي · فوري' : ship ? money(ship) : 'مجاني';
     $('#cartTotal').textContent = money(sub + ship);
     const fo = (CFG.shipping || {}).freeOver;
-    $('#freeHint').hidden = !(fo > 0 && sub > 0 && sub < fo);
+    $('#freeHint').hidden = dOnly || !(fo > 0 && sub > 0 && sub < fo);
     $('#freeHint').textContent = `أضف ${money(Math.round((fo - sub) * 100) / 100)} وبيصير التوصيل مجاني`;
     if (!$('[data-view="checkout"]').hidden) renderSummary();
     void total;
@@ -214,7 +224,9 @@
     const p = byId.get(id);
     if (!p || !inStock(p)) return false;
     if (hasOpts(p) && p.options.some((o) => o.values && o.values.length && !options[o.name])) { location.hash = href(p); return false; }
-    if (p.stock > 0 && qtyOf(id) + qty > p.stock) { toast(`المتوفر ${num(p.stock)} بس`); return false; }
+    if (isDigital(p) && qtyOf(id) > 0) { toast('المنتج الرقمي موجود بالسلة، نسخة وحدة بتكفي'); return false; }
+    if (isDigital(p)) qty = 1;
+    else if (p.stock > 0 && qtyOf(id) + qty > p.stock) { toast(`المتوفر ${num(p.stock)} بس`); return false; }
     const k = optKey(options);
     const line = cart.find((l) => l.id === id && optKey(l.options) === k);
     if (line) line.qty += qty; else cart.push({ id, qty, options });
@@ -225,6 +237,7 @@
   const changeQty = (key, d) => {
     const l = cart.find((x) => `${x.id}#${optKey(x.options)}` === key); if (!l) return;
     const p = byId.get(l.id);
+    if (d > 0 && p && isDigital(p)) { toast('نسخة وحدة بتكفي من المنتج الرقمي'); return; }
     if (d > 0 && p && p.stock > 0 && qtyOf(l.id) >= p.stock) { toast('هاي كل الكمية المتوفرة'); return; }
     l.qty += d; if (l.qty <= 0) cart = cart.filter((x) => x !== l);
     persistCart(); renderCart();
@@ -261,21 +274,29 @@
     const { sub, ship, discount, total } = totals();
     $('#coSummary').innerHTML = `<div><span>المنتجات</span><b>${money(sub)}</b></div>
       ${discount ? `<div class="disc"><span>خصم ${esc(appliedCoupon.code)}</span><b>−${money(discount)}</b></div>` : ''}
-      <div><span>التوصيل</span><b>${ship ? money(ship) : 'مجاني'}</b></div><div class="grand"><span>المجموع</span><b>${money(total)}</b></div>`;
+      <div><span>${allDigital() ? 'التسليم' : 'التوصيل'}</span><b>${allDigital() ? 'رقمي · فوري' : ship ? money(ship) : 'مجاني'}</b></div><div class="grand"><span>المجموع</span><b>${money(total)}</b></div>`;
   }
 
+  const allDigital = () => { const ls_ = cartLines(); return ls_.length > 0 && ls_.every((l) => isDigital(l.p)); };
   async function startCheckout() {
-    const methods = enabledMethods();
-    const list = methods.length ? methods : ['cod'];
+    const digital = allDigital();
+    const methods = enabledMethods().filter((k) => !(digital && k === 'cod'));
+    const list = methods.length ? methods : [digital ? 'manual' : 'cod'];
     const desc = {
       cod: 'بتدفع نقداً لما يوصلك الطلب.',
       paypal: 'ادفع بحساب PayPal أو بالبطاقة كضيف، على صفحة PayPal الآمنة.',
-      bank: 'منبعتلك بيانات الحساب بعد الطلب، وبنشحن بعد وصول التحويل.',
+      bank: digital ? 'منبعتلك بيانات الحساب، وبعد وصول التحويل منبعتلك رابط التحميل.' : 'منبعتلك بيانات الحساب بعد الطلب، وبنشحن بعد وصول التحويل.',
+      manual: 'منتواصل معك على واتساب لنتفق على طريقة الدفع، وبعدها منبعتلك رابط التحميل.',
     };
+    const f0 = $('#checkoutForm');
+    f0.dataset.digital = digital ? '1' : '';
+    ['city', 'address'].forEach((k) => { const el = f0.querySelector(`[data-f="${k}"]`); el.hidden = digital; f0[k].required = !digital; });
+    f0.querySelector('legend').textContent = digital ? 'معلومات التسليم' : 'معلومات التوصيل';
+    f0.querySelector('[data-f="email"] span').textContent = digital ? 'الإيميل (لنبعتلك رابط التحميل)' : 'الإيميل (اختياري، لنبعتلك تحديثات الطلب)';
     $('#payMethods').innerHTML = list.map((k, i) => `
       <label class="pay-opt"><input type="radio" name="method" value="${k}" ${i === 0 ? 'checked' : ''}>
         <span class="pay-ico pay-${k}" aria-hidden="true"></span>
-        <span><b>${S.METHODS[k]}</b><small>${desc[k]}</small></span></label>`).join('');
+        <span><b>${S.METHODS[k] || 'تواصل للدفع'}</b><small>${desc[k]}</small></span></label>`).join('');
     const f = $('#checkoutForm');
     const u = D.auth.user, pr = D.auth.profile;
     $('#coAuth').innerHTML = D.mode === 'cloud' ? (u
@@ -306,7 +327,7 @@
     $('#coErr').hidden = true;
     renderSummary();
     view('checkout');
-    (f.name.value ? f.address : f.name).focus();
+    (f.name.value ? (digital ? f.email : f.address) : f.name).focus();
   }
 
   async function applyCoupon() {
@@ -332,8 +353,8 @@
     let bad = null;
     if (val('name').length < 2) bad = 'name';
     else if (phone.replace(/\D/g, '').length < 7) bad = 'phone';
-    else if (!val('city')) bad = 'city';
-    else if (val('address').length < 4) bad = 'address';
+    else if (!f.dataset.digital && !val('city')) bad = 'city';
+    else if (!f.dataset.digital && val('address').length < 4) bad = 'address';
     else if (val('email') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val('email'))) bad = 'email';
     $$('.field', f).forEach((el) => el.classList.toggle('invalid', el.dataset.f === bad));
     if (bad) { f[bad].focus(); return; }
@@ -343,9 +364,10 @@
     const btn = f.querySelector('[type=submit]'); btn.disabled = true; btn.classList.add('busy');
     $('#coErr').hidden = true;
     try {
-      const customer = { name: val('name'), phone, email: val('email'), city: val('city'), address: val('address'), notes: val('notes') };
+      const dg = !!f.dataset.digital;
+      const customer = { name: val('name'), phone, email: val('email'), city: dg ? '' : val('city'), address: dg ? '' : val('address'), notes: val('notes') };
       const order = await D.placeOrder({ lines, customer, method: f.method.value, coupon: appliedCoupon ? appliedCoupon.code : '', totals: totals() });
-      ls.set('raff.customer', { name: customer.name, phone, email: customer.email, city: customer.city, address: customer.address });
+      ls.set('raff.customer', { ...ls.get('raff.customer', {}), name: customer.name, phone, email: customer.email, ...(dg ? {} : { city: customer.city, address: customer.address }) });
       cart = []; appliedCoupon = null; f.coupon.value = ''; $('#couponMsg').hidden = true;
       persistCart(); renderCart();
       if (D.mode === 'cloud') refreshCatalog();
@@ -360,10 +382,12 @@
     `رقم الطلب: ${o.id}`,
     ...o.items.map((x) => `• ${x.name}${optsText(x.options) ? ` (${optsText(x.options)})` : ''} × ${x.qty} = ${money(x.price * x.qty)}`),
     o.discount ? `الخصم (${o.coupon}): −${money(o.discount)}` : '',
-    `التوصيل: ${o.shipping ? money(o.shipping) : 'مجاني'}`,
+    o.items.every((x) => x.digital) ? 'التسليم: رقمي (رابط تحميل)' : `التوصيل: ${o.shipping ? money(o.shipping) : 'مجاني'}`,
     `المجموع: ${money(o.total)}`,
-    `الدفع: ${S.METHODS[o.method]}`,
-    `الاسم: ${o.customer.name}`, `الهاتف: ${o.customer.phone}`, `العنوان: ${o.customer.city}، ${o.customer.address}`,
+    `الدفع: ${S.METHODS[o.method] || 'تواصل للدفع'}`,
+    `الاسم: ${o.customer.name}`, `الهاتف: ${o.customer.phone}`,
+    o.customer.email ? `الإيميل: ${o.customer.email}` : '',
+    o.customer.address ? `العنوان: ${o.customer.city}، ${o.customer.address}` : '',
     o.customer.notes ? `ملاحظات: ${o.customer.notes}` : '',
     D.mode === 'local' ? `\nرمز الطلب (لا تعدّله): ${S.encodeOrder(o)}` : '',
   ].filter((l) => l !== '').join('\n');
@@ -386,6 +410,7 @@
         <div><span>المبلغ</span><b>${money(o.total)}</b></div>
         <p class="note">اكتب رقم الطلب <b>${esc(o.id)}</b> بوصف التحويل.</p></div>`);
     }
+    if (o.items.every((x) => x.digital)) steps.push(`<p class="note">منتج رقمي: بعد ما يتأكد الدفع منبعتلك رابط التحميل على ${o.customer.email ? `<b>${esc(o.customer.email)}</b>` : 'واتساب'}.</p>`);
     if (o.method === 'cod') steps.push('<p class="note">بتدفع نقداً عند الاستلام. منتواصل معك لنأكد العنوان والموعد.</p>');
     if (D.mode === 'cloud') {
       steps.push(`<a class="btn-dark wide" href="${D.auth.user ? `#/orders/${encodeURIComponent(o.id)}` : `#/track?id=${encodeURIComponent(o.id)}`}" data-action="close-cart">تابع حالة طلبك</a>`);
@@ -398,7 +423,7 @@
     $('#doneBody').innerHTML = `
       <div class="done-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <p class="done-id">رقم الطلب <b>${esc(o.id)}</b></p>
-      <p class="done-total">${money(o.total)} · ${esc(S.METHODS[o.method])}</p>
+      <p class="done-total">${money(o.total)} · ${esc(S.METHODS[o.method] || 'تواصل للدفع')}</p>
       ${D.mode === 'cloud' ? '<p class="note center">وصلنا طلبك. احتفظ برقم الطلب لتتابعه.</p>' : ''}
       <div class="done-steps">${steps.join('')}</div>`;
     view('done');
@@ -427,18 +452,20 @@
     $('#qvRate').textContent = p.reviews ? `★ ${num(p.rating)} · ${compact(p.reviews)} تقييم` : '';
     $('#qvDesc').textContent = p.desc || '';
     $('#qvPrice').innerHTML = priceHTML(p);
-    $('#qvStock').textContent = !inStock(p) ? 'نفدت الكمية' : p.stock > 0 && p.stock <= 5 ? `باقي ${num(p.stock)} بس` : '';
+    $('#qvStock').textContent = isDigital(p) ? `منتج رقمي${p.format ? ` · ${p.format}` : ''} · تحميل بعد الدفع` : !inStock(p) ? 'نفدت الكمية' : p.stock > 0 && p.stock <= 5 ? `باقي ${num(p.stock)} بس` : '';
     $('#qvOpts').innerHTML = optionPicker(p, 'qv');
     $('#qvMore').href = href(p);
     $('#qvAdd').disabled = !inStock(p);
-    $('#qvAdd').textContent = inStock(p) ? 'أضف إلى السلة' : 'نفد من المخزون';
+    $('#qvAdd').textContent = S.safeUrl(p.buyUrl) ? 'اشترِ الآن' : inStock(p) ? 'أضف إلى السلة' : 'نفد من المخزون';
     if (typeof qv.showModal === 'function') qv.showModal(); else qv.setAttribute('open', '');
   };
   const closeQV = () => (qv.close ? qv.close() : qv.removeAttribute('open'));
   qv.addEventListener('click', (e) => { if (e.target === qv) closeQV(); });
   $('#qvMore').addEventListener('click', closeQV);
   $('#qvAdd').addEventListener('click', () => {
-    const o = readOptions(qv, byId.get(qvId));
+    const qp = byId.get(qvId);
+    if (qp && S.safeUrl(qp.buyUrl)) { closeQV(); location.hash = href(qp); return; }
+    const o = readOptions(qv, qp);
     if (o === null) return;
     if (addToCart(qvId, 1, o)) closeQV();
   });
@@ -482,7 +509,7 @@
     const el = e.target.closest('button, [data-action]');
     if (!el) return;
     const d = el.dataset;
-    if (d.add) { const p = byId.get(+d.add); if (p && hasOpts(p)) location.hash = href(p); else addToCart(+d.add); return; }
+    if (d.add) { const p = byId.get(+d.add); if (p && (hasOpts(p) || S.safeUrl(p.buyUrl))) location.hash = href(p); else addToCart(+d.add); return; }
     if (d.open) { openQV(+d.open); return; }
     if (d.save) { toggleSave(+d.save); return; }
     if (d.inc) { changeQty(d.inc, 1); return; }
@@ -570,7 +597,7 @@
   }
 
   const api = window.raff = {
-    CFG, CATS, P, byId, money, card, tile, art, href, priceHTML, inStock, hasOpts, optionPicker, readOptions, optsText,
+    CFG, CATS, P, byId, money, card, tile, art, href, priceHTML, inStock, hasOpts, isDigital, qtyOf, optionPicker, readOptions, optsText,
     addToCart, openCart, closeCart, toast, renderSaved, refreshCatalog, open: openQV,
     onReady: [],
   };

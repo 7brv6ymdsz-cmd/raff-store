@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 
 test('instant answers find the right topic from everyday wording @mobile', async ({ page }) => {
   await page.goto('');

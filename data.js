@@ -60,12 +60,15 @@
     kind: (r.art || {}).kind || 'tote', bg: (r.art || {}).bg || '#efe8dc', fg: (r.art || {}).fg, ac: (r.art || {}).ac,
     options: Array.isArray(r.options) ? r.options : [], featured: !!r.featured, hidden: !!r.hidden,
     rating: +r.rating || 0, reviews: r.reviews_count || 0, sort: r.sort || 0, threshold: r.low_stock_threshold ?? 5,
+    ...(r.product_type === 'digital' ? { type: 'digital', ...(r.digital || {}) } : {}),
   });
   const toRow = (p) => ({
     name: p.name, brand: p.store || '', category_id: p.cat || null, price: +p.price || 0, compare_at: +p.compare > +p.price ? +p.compare : null,
     stock: Math.max(0, Math.floor(+p.stock || 0)), description: p.desc || '', images: (p.images && p.images.length ? p.images : (p.img ? [p.img] : [])),
     art: { kind: p.kind || 'tote', bg: p.bg || '#efe8dc', fg: p.fg || null, ac: p.ac || null },
     options: Array.isArray(p.options) ? p.options : [], featured: !!p.featured, hidden: !!p.hidden, sort: +p.sort || 0, low_stock_threshold: Number.isFinite(+p.threshold) ? Math.max(0, Math.floor(+p.threshold)) : 5,
+    product_type: S.isDigital(p) ? 'digital' : 'physical',
+    digital: S.isDigital(p) ? { format: p.format || '', fileSize: p.fileSize || '', details: p.details || '', buyUrl: S.safeUrl(p.buyUrl), previewUrl: S.safeUrl(p.previewUrl) } : {},
   });
   const orderFromRow = (o) => ({
     id: o.id, createdAt: new Date(o.created_at).getTime(), customer: o.customer || {}, items: o.items || [],
@@ -185,7 +188,7 @@
     }
     const o = {
       id: S.newOrderId(), createdAt: Date.now(), customer, method, coupon: coupon || '',
-      items: lines.map((l) => ({ id: l.p.id, qty: l.qty, price: l.p.price, name: l.p.name, options: l.options || {} })),
+      items: lines.map((l) => ({ id: l.p.id, qty: l.qty, price: l.p.price, name: l.p.name, options: l.options || {}, ...(S.isDigital(l.p) ? { digital: true } : {}) })),
       subtotal: totals.sub, discount: totals.discount, shipping: totals.ship, total: totals.total, status: 'new', paid: false,
       history: [{ s: 'new', t: Date.now() }],
     };

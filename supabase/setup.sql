@@ -53,6 +53,11 @@ do $$ begin
   end if;
 end $$;
 alter table public.products add column if not exists low_stock_threshold int not null default 5;
+-- Digital products: no stock, no shipping. `digital` holds format, fileSize, details, buyUrl, previewUrl.
+alter table public.products add column if not exists product_type text not null default 'physical';
+alter table public.products add column if not exists digital jsonb not null default '{}'::jsonb;
+alter table public.products drop constraint if exists products_product_type_check;
+alter table public.products add constraint products_product_type_check check (product_type in ('physical', 'digital'));
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -104,7 +109,7 @@ create table if not exists public.orders (
   shipping numeric(12,2) not null default 0,
   total numeric(12,2) not null,
   coupon text,
-  method text not null check (method in ('cod', 'paypal', 'bank')),
+  method text not null check (method in ('cod', 'paypal', 'bank', 'manual')),
   status text not null default 'new' check (status in ('new', 'confirmed', 'shipped', 'delivered', 'cancelled')),
   paid boolean not null default false,
   note text not null default '',
@@ -113,6 +118,8 @@ create table if not exists public.orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.orders drop constraint if exists orders_method_check;
+alter table public.orders add constraint orders_method_check check (method in ('cod', 'paypal', 'bank', 'manual'));
 create index if not exists orders_user_idx on public.orders (user_id, created_at desc);
 create index if not exists orders_created_idx on public.orders (created_at desc);
 
@@ -230,15 +237,14 @@ declare
   s jsonb; it jsonb; prod public.products;
   items jsonb := '[]'::jsonb; sub numeric := 0; ship numeric; disc numeric := 0; cj jsonb;
   q int; oid text; m text := coalesce(p->>'method', 'cod'); c jsonb := p->'customer'; v_code text := nullif(upper(trim(coalesce(p->>'coupon', ''))), '');
-  opts jsonb; o public.orders;
+  opts jsonb; o public.orders; has_phys boolean := false;
 begin
   if c is null or char_length(trim(coalesce(c->>'name', ''))) < 2 then raise exception 'name_required'; end if;
   if char_length(regexp_replace(coalesce(c->>'phone', ''), '\D', '', 'g')) < 7 then raise exception 'phone_required'; end if;
-  if char_length(trim(coalesce(c->>'city', ''))) < 1 or char_length(trim(coalesce(c->>'address', ''))) < 4 then raise exception 'address_required'; end if;
   if jsonb_typeof(p->'items') <> 'array' or jsonb_array_length(p->'items') = 0 or jsonb_array_length(p->'items') > 50 then raise exception 'items_invalid'; end if;
 
   select data into s from public.settings where id = 1;
-  if not coalesce((s->'payments'->m->>'on')::boolean, m = 'cod') then raise exception 'method_unavailable'; end if;
+  if m <> 'manual' and not coalesce((s->'payments'->m->>'on')::boolean, m = 'cod') then raise exception 'method_unavailable'; end if;
 
   oid := 'R-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 7));
   perform set_config('raff.stock_reason', 'order', true);
@@ -247,15 +253,23 @@ begin
     q := greatest(1, least(50, coalesce((it->>'qty')::int, 1)));
     select * into prod from public.products where id = (it->>'id')::bigint and not hidden for update;
     if not found then raise exception 'product_unavailable:%', it->>'id'; end if;
-    if prod.stock < q then raise exception 'out_of_stock:%', prod.name; end if;
     opts := case when jsonb_typeof(it->'options') = 'object' then it->'options' else '{}'::jsonb end;
-    update public.products set stock = stock - q where id = prod.id;
+    if prod.product_type = 'digital' then
+      q := 1; -- one licence per line; nothing to reserve
+    else
+      has_phys := true;
+      if prod.stock < q then raise exception 'out_of_stock:%', prod.name; end if;
+      update public.products set stock = stock - q where id = prod.id;
+    end if;
     sub := sub + prod.price * q;
     items := items || jsonb_build_array(jsonb_build_object('id', prod.id, 'name', prod.name, 'price', prod.price, 'qty', q, 'options', opts,
-      'image', coalesce(prod.images[1], '')));
+      'image', coalesce(prod.images[1], '')) || case when prod.product_type = 'digital' then '{"digital": true}'::jsonb else '{}'::jsonb end);
   end loop;
 
-  ship := case when coalesce((s->'shipping'->>'freeOver')::numeric, 0) > 0 and sub >= (s->'shipping'->>'freeOver')::numeric then 0
+  if has_phys and (char_length(trim(coalesce(c->>'city', ''))) < 1 or char_length(trim(coalesce(c->>'address', ''))) < 4) then raise exception 'address_required'; end if;
+  if (m = 'cod' and not has_phys) or (m = 'manual' and has_phys) then raise exception 'method_unavailable'; end if;
+
+  ship := case when not has_phys then 0 when coalesce((s->'shipping'->>'freeOver')::numeric, 0) > 0 and sub >= (s->'shipping'->>'freeOver')::numeric then 0
                else coalesce((s->'shipping'->>'fee')::numeric, 0) end;
   if v_code is not null then
     cj := public.coupon_discount(v_code, sub, ship);
@@ -267,7 +281,7 @@ begin
   insert into public.orders (id, user_id, customer, items, subtotal, discount, shipping, total, coupon, method, history)
   values (oid, auth.uid(),
     jsonb_build_object('name', left(trim(c->>'name'), 120), 'phone', left(regexp_replace(c->>'phone', '[^\d+]', '', 'g'), 40),
-      'email', left(coalesce(c->>'email', ''), 160), 'city', left(trim(c->>'city'), 80), 'address', left(trim(c->>'address'), 300),
+      'email', left(coalesce(c->>'email', ''), 160), 'city', left(trim(coalesce(c->>'city', '')), 80), 'address', left(trim(coalesce(c->>'address', '')), 300),
       'notes', left(coalesce(c->>'notes', ''), 500)),
     items, sub, disc, ship, greatest(0, sub - disc + ship), v_code, m,
     jsonb_build_array(jsonb_build_object('s', 'new', 't', now())))
@@ -304,12 +318,12 @@ begin
   if o.status = p_status then return to_jsonb(o); end if;
   if p_status = 'cancelled' and o.stock_applied then
     for it in select * from jsonb_array_elements(o.items) loop
-      update public.products set stock = stock + (it->>'qty')::int where id = (it->>'id')::bigint;
+      update public.products set stock = stock + (it->>'qty')::int where id = (it->>'id')::bigint and product_type <> 'digital';
     end loop;
     o.stock_applied := false;
   elsif p_status <> 'cancelled' and not o.stock_applied then
     for it in select * from jsonb_array_elements(o.items) loop
-      update public.products set stock = greatest(0, stock - (it->>'qty')::int) where id = (it->>'id')::bigint;
+      update public.products set stock = greatest(0, stock - (it->>'qty')::int) where id = (it->>'id')::bigint and product_type <> 'digital';
     end loop;
     o.stock_applied := true;
   end if;
@@ -610,7 +624,7 @@ begin
     insert into public.stock_movements (product_id, delta, stock_after, reason, ref, note, actor)
     values (new.id, new.stock - before, new.stock, reason, ref, note, auth.uid());
     -- crossing the threshold downwards → one alert (not one per sale)
-    if new.stock <= new.low_stock_threshold and before > new.low_stock_threshold and not new.hidden then
+    if new.stock <= new.low_stock_threshold and before > new.low_stock_threshold and not new.hidden and new.product_type <> 'digital' then
       insert into public.admin_notifications (kind, title, body, link)
       values (case when new.stock = 0 then 'out_of_stock' else 'low_stock' end,
               case when new.stock = 0 then 'نفد من المخزون: ' else 'المخزون قليل: ' end || new.name,

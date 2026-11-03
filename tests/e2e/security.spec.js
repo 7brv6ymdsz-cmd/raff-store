@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 
 test('a malicious product name is shown as text and never runs', async ({ page }) => {
   await page.goto('admin/');

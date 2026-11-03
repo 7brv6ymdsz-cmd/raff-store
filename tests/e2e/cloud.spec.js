@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, useFixture } from '../helpers/fixtures.js';
 import { makeMock, attachMock } from '../helpers/supabase-mock.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -6,7 +6,7 @@ test.describe.configure({ mode: 'serial' });
 test('server mode: accounts, orders, coupons, reviews, answer system and account deletion', async ({ browser }) => {
   test.setTimeout(180_000);
   const mock = makeMock();
-  const newPage = async (viewport = { width: 1366, height: 860 }) => { const ctx = await browser.newContext({ viewport }); await attachMock(ctx, mock); return ctx.newPage(); };
+  const newPage = async (viewport = { width: 1366, height: 860 }) => { const ctx = await browser.newContext({ viewport }); await useFixture(ctx); await attachMock(ctx, mock); return ctx.newPage(); };
   const admin = await newPage();
   const shop = await newPage();
 

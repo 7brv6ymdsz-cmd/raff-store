@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, useFixture } from '../helpers/fixtures.js';
 import { makeMock, attachMock } from '../helpers/supabase-mock.js';
 
 test('roles, inventory movements, low-stock alerts and the activity log (server mode)', async ({ browser }) => {
   test.setTimeout(150_000);
   const mock = makeMock();
-  const page = async () => { const ctx = await browser.newContext({ viewport: { width: 1366, height: 860 } }); await attachMock(ctx, mock); return ctx.newPage(); };
+  const page = async () => { const ctx = await browser.newContext({ viewport: { width: 1366, height: 860 } }); await useFixture(ctx); await attachMock(ctx, mock); return ctx.newPage(); };
   const owner = await page();
 
   await test.step('owner signs in and sees every section', async () => {

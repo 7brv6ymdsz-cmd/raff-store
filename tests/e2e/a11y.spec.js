@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 
 for (const path of ['', '#/p/14', '#/faq', '#/contact', '#/track', '#/login', 'admin/']) {

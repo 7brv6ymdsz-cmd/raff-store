@@ -15,11 +15,16 @@
     const c = (R() && R().CFG) || {}, sh = c.shipping || {}, pay = c.payments || {}, pg = c.pages || {}, ct = c.contact || {};
     const methods = [pay.cod && pay.cod.on ? 'نقداً عند الاستلام' : '', pay.paypal && pay.paypal.on ? 'PayPal أو بطاقة على صفحة PayPal الآمنة' : '', pay.bank && pay.bank.on ? 'تحويل بنكي' : ''].filter(Boolean);
     const first = (txt) => String(txt || '').split(/\n\s*\n/)[0].trim();
+    const P = (R() && R().P) || [];
+    const digi = P.length > 0 && P.every(S.isDigital), anyDigi = P.some(S.isDigital);
+    if (digi) methods.splice(0, methods.length, ...methods.filter((m) => !m.startsWith('نقداً')));
     const kb = [
+      ...(anyDigi ? [{ id: 'download', q: 'كيف بستلم المنتج الرقمي وبحمّله؟', k: 'تحميل حمل نزل تنزيل download رابط لينك ملف pdf كتاب دوره كورس قالب استلم وصلني ما وصل ايميل بريد سبام spam رقمي الكتروني',
+        a: 'المنتجات الرقمية ما إلها شحن. إذا المنتج فيه زر «اشترِ الآن · تحميل فوري»، بتدفع على صفحة الدفع الآمنة وبيوصلك رابط التحميل فوراً على إيميلك. غير هيك، منبعتلك الرابط على الإيميل أو واتساب أول ما يتأكد الدفع. ما لقيت الرابط؟ شيّك مجلد Spam، أو راسلنا برقم الطلب.', link: ['#/shipping', 'التسليم والتحميل'] }] : []),
       { id: 'shipping', q: 'قديش التوصيل وكم بياخد وقت؟', k: 'توصيل شحن يوصل توصل وصول مده وقت ايام يوم رسوم اجور delivery shipping مجاني',
         a: `${sh.fee ? `رسوم التوصيل ${money(sh.fee)}` : 'التوصيل مجاني'}${sh.freeOver > 0 ? `، ومجاني لكل طلب فوق ${money(sh.freeOver)}` : ''}. ${first(pg.shipping) || 'التوصيل عادةً بياخد من ٢ لـ ٥ أيام عمل حسب المدينة، ومنتواصل معك قبل لنأكد الموعد.'}`, link: ['#/shipping', 'تفاصيل التوصيل'] },
       { id: 'payment', q: 'كيف فيني ادفع؟', k: 'دفع ادفع بطاقه فيزا ماستر كارد visa paypal باي بال كاش نقد نقدي استلام تحويل بنك بنكي حساب iban',
-        a: `فيك تدفع ${methods.join('، أو ') || 'نقداً عند الاستلام'}. ما منطلب ولا منخزّن أرقام بطاقات على موقعنا.` },
+        a: `فيك تدفع ${methods.join('، أو ') || (digi ? 'من صفحة المنتج بالبطاقة أو PayPal، أو بالتواصل معنا على واتساب' : 'نقداً عند الاستلام')}. ما منطلب ولا منخزّن أرقام بطاقات على موقعنا.` },
       { id: 'returns', q: 'فيني رجّع أو بدّل المنتج؟', k: 'ارجاع رجع ارجع استرجاع استبدال بدل ابدل مرتجع رد مبلغ فلوس عيب خربان مكسور غلط return refund',
         a: first(pg.returns) || 'أكيد، خلال ١٤ يوم من الاستلام إذا المنتج بحالته الأصلية أو وصلك فيه عيب. راسلنا برقم الطلب ومنرتّب الاستلام.', link: ['#/returns', 'سياسة الإرجاع'] },
       { id: 'track', q: 'وين صار طلبي؟', k: 'طلبي طلب تتبع تتبيع تابع حاله وصل وين متاخر تاخر order track tracking رقم',
@@ -37,6 +42,12 @@
     String(pg.faq || '').split(/\n\s*\n/).map((b) => b.trim().split('\n')).filter((l) => l[0] && l[1]).forEach(([q, ...a], i) => {
       kb.unshift({ id: `faq${i}`, q: q.trim(), k: q, a: a.join(' ').trim(), own: true });
     });
+    if (digi) {
+      // no shipping, nothing physical to send back
+      const ret = kb.find((x) => x.id === 'returns');
+      if (ret && !pg.returns) { ret.q = 'فيني أسترد المبلغ؟'; ret.a = 'إذا الملف ما اشتغل معك أو ما طابق الوصف، راسلنا خلال ١٤ يوم برقم الطلب ومنصلّح المشكلة أو منرجّعلك المبلغ.'; ret.link = ['#/returns', 'سياسة الاسترداد']; }
+      return kb.filter((x) => x.id !== 'shipping' && x.id !== 'sizes');
+    }
     return kb;
   }
 
@@ -48,7 +59,7 @@
       return { p, score };
     }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 2).map(({ p }) => ({
       id: `p${p.id}`, q: p.name, product: p,
-      a: `${p.name} من ${p.store}: ${money(p.price)}${p.compare > p.price ? ` بدل ${money(p.compare)}` : ''}. ${p.stock <= 0 ? 'حالياً نفد.' : p.stock <= 5 ? `باقي ${num(p.stock)} قطع بس.` : 'متوفر.'}`,
+      a: `${p.name} من ${p.store}: ${money(p.price)}${p.compare > p.price ? ` بدل ${money(p.compare)}` : ''}. ${S.isDigital(p) ? `منتج رقمي${p.format ? ` (${p.format})` : ''}، ${S.safeUrl(p.buyUrl) ? 'بتحمّله فوراً بعد الدفع' : 'بيوصلك رابطه بعد الدفع'}.` : p.stock <= 0 ? 'حالياً نفد.' : p.stock <= 5 ? `باقي ${num(p.stock)} قطع بس.` : 'متوفر.'}`,
       link: [`#/p/${p.id}`, 'صفحة المنتج'],
     }));
   }

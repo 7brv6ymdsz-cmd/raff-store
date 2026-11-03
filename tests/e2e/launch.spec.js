@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/fixtures.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,6 +32,7 @@ test('launch: clear the sample products, add a real product with a photo, store 
   await page.fill('#editor [name=name]', 'فستان صيفي');
   await page.fill('#editor [name=store]', 'متجري');
   await page.fill('#editor [name=price]', '35');
+  await page.click('#editor .type-seg label:has([value=physical])');
   await page.fill('#editor [name=stock]', '12');
   await page.setInputFiles('#imgIn', IMG);
   await expect(page.locator('.g-item')).toHaveCount(1);

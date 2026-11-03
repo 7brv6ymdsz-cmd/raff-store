@@ -467,7 +467,7 @@
   /* ---------- Order sync / import ---------- */
   function applyStock(o, dir) {
     const m = byPid();
-    o.items.forEach((x) => { const p = m.get(x.id); if (p && Number.isFinite(+p.stock)) p.stock = Math.max(0, (+p.stock) - dir * x.qty); });
+    o.items.forEach((x) => { const p = m.get(x.id); if (p && !S.isDigital(p) && Number.isFinite(+p.stock)) p.stock = Math.max(0, (+p.stock) - dir * x.qty); });
   }
   function addOrder(o) {
     if (state.orders.some((x) => x.id === o.id)) return false;
@@ -547,14 +547,16 @@
     const st = state.settings, pay = st.payments || {}, ct = st.contact || {};
     const real = state.products.filter((p) => !p.demo && !p.hidden);
     const wa = String(st.whatsapp || '').replace(/\D/g, '');
-    const payOk = (pay.cod && pay.cod.on) || (pay.paypal && pay.paypal.on && pay.paypal.user) || (pay.bank && pay.bank.on && pay.bank.iban);
+    const digi = real.length > 0 && real.every(S.isDigital);
+    const manualDigi = real.filter((p) => S.isDigital(p) && !S.safeUrl(p.buyUrl));
+    const payOk = (!digi && pay.cod && pay.cod.on) || (real.length > 0 && manualDigi.length === 0) || (pay.paypal && pay.paypal.on && pay.paypal.user) || (pay.bank && pay.bank.on && pay.bank.iban);
     return [
       { ok: !state.products.some((p) => p.demo), crit: true, t: 'مسح المنتجات التجريبية', d: 'الأمثلة الحالية بأسماء وتقييمات غير حقيقية.', act: '<button class="btn" type="button" data-act="clear-demo-products">امسحها</button>' },
       { ok: real.length > 0, crit: true, t: 'منتجك الأول', d: real.length ? `${num(real.length)} منتج ظاهر بالمتجر.` : 'أضف منتج واحد على الأقل بصورته وسعره.', act: '<a class="btn" href="#products">أضف منتج</a>' },
-      { ok: CLOUD || wa.length >= 8, crit: !CLOUD, t: CLOUD ? 'رقم واتساب (اختياري مع السيرفر)' : 'رقم واتساب لاستلام الطلبات', d: CLOUD ? 'الطلبات بتوصل للوحة. الرقم بيسهّل تواصل الزبائن.' : 'بدون سيرفر، الطلب بيوصلك برسالة واتساب. بدون رقم ما في طريقة يوصلك الطلب.', act: '<a class="btn" href="#payments">أضف الرقم</a>' },
-      { ok: !!payOk, crit: true, t: 'طريقة دفع واحدة على الأقل', d: 'الدفع عند الاستلام، أو PayPal باسمك، أو تحويل بنكي برقم حسابك.', act: '<a class="btn" href="#payments">طرق الدفع</a>' },
+      { ok: CLOUD || wa.length >= 8 || (real.length > 0 && manualDigi.length === 0), crit: !CLOUD && !(real.length > 0 && manualDigi.length === 0), t: CLOUD ? 'رقم واتساب (اختياري مع السيرفر)' : 'رقم واتساب لاستلام الطلبات', d: CLOUD ? 'الطلبات بتوصل للوحة. الرقم بيسهّل تواصل الزبائن.' : 'بدون سيرفر، الطلب بيوصلك برسالة واتساب. بدون رقم ما في طريقة يوصلك الطلب.', act: '<a class="btn" href="#payments">أضف الرقم</a>' },
+      { ok: !!payOk, crit: true, t: 'طريقة دفع واحدة على الأقل', d: digi ? `ضيف رابط دفع وتحميل (Payhip أو Gumroad) لكل منتج رقمي، أو فعّل PayPal أو التحويل البنكي.${manualDigi.length ? ` ${num(manualDigi.length)} منتج بلا رابط دفع.` : ''}` : 'الدفع عند الاستلام، أو PayPal باسمك، أو تحويل بنكي برقم حسابك.', act: '<a class="btn" href="#payments">طرق الدفع</a>' },
       { ok: !!(ct.email || ct.phone || wa), crit: false, t: 'معلومات التواصل', d: 'إيميل أو هاتف بصفحة «تواصل معنا»، ليثق فيك الزبون.', act: '<a class="btn" href="#settings">أضف</a>' },
-      { ok: !!(st.pages && (st.pages.returns || st.pages.shipping)), crit: false, t: 'سياسة التوصيل والإرجاع بكلامك', d: 'في نص افتراضي جاهز، بس الأفضل تكتب شروطك الحقيقية.', act: '<a class="btn" href="#settings">اكتبها</a>' },
+      { ok: !!(st.pages && (st.pages.returns || st.pages.shipping)), crit: false, t: digi ? 'سياسة التسليم والاسترداد بكلامك' : 'سياسة التوصيل والإرجاع بكلامك', d: 'في نص افتراضي جاهز، بس الأفضل تكتب شروطك الحقيقية.', act: '<a class="btn" href="#settings">اكتبها</a>' },
       { ok: CLOUD, crit: false, t: 'ربط السيرفر (مجاني)', d: 'لحسابات الزبائن والطلبات الفورية والتقييمات ونظام الرسائل.', act: '<a class="btn" href="#server">اربط</a>' },
       { ok: !dirty(), crit: true, t: 'نشر آخر التعديلات', d: CLOUD ? 'محفوظ مباشرة على السيرفر.' : 'تعديلاتك محفوظة عندك بس لحد ما تنشرها.', act: '<a class="btn" href="#publish">انشر</a>' },
     ];
@@ -586,7 +588,7 @@
       const d = Math.round(((a - b) / b) * 100);
       return `<span class="delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${num(Math.abs(d))}٪</span>`;
     };
-    const low = state.products.filter((p) => !p.hidden && Number.isFinite(+p.stock) && p.stock <= 3).sort((a, b) => a.stock - b.stock);
+    const low = state.products.filter((p) => !p.hidden && !S.isDigital(p) && Number.isFinite(+p.stock) && p.stock <= 3).sort((a, b) => a.stock - b.stock);
 
     // top products
     const tally = new Map();
@@ -732,6 +734,8 @@
     if (!o) return;
     const pm = byPid();
     const wa = o.customer.phone.replace(/\D/g, '');
+    const isDg = (x) => x.digital || S.isDigital(pm.get(x.id));
+    const dgItems = o.items.filter(isDg), dgOnly = dgItems.length === o.items.length;
     const msg = {
       new: `مرحبا ${o.customer.name}، استلمنا طلبك ${o.id} بقيمة ${money(o.total)}. منأكد معك التفاصيل؟`,
       confirmed: `مرحبا ${o.customer.name}، طلبك ${o.id} تأكد وعم نجهّزه.`,
@@ -756,20 +760,31 @@
         <section class="block">
           <h3>المنتجات</h3>
           <ul class="line-items">${o.items.map((x) => `<li>${thumb(pm.get(x.id))}<div><b>${esc(x.name)}</b><small>${optsText(x.options) ? `${esc(optsText(x.options))} · ` : ''}${money(x.price)} × ${num(x.qty)}</small></div><span>${money(x.price * x.qty)}</span></li>`).join('')}</ul>
-          <div class="sums"><div><span>المنتجات</span><b>${money(o.subtotal)}</b></div>${o.discount ? `<div class="disc"><span>الخصم ${esc(o.coupon || '')}</span><b>−${money(o.discount)}</b></div>` : ''}<div><span>التوصيل</span><b>${o.shipping ? money(o.shipping) : 'مجاني'}</b></div><div class="grand"><span>المجموع</span><b>${money(o.total)}</b></div></div>
+          <div class="sums"><div><span>المنتجات</span><b>${money(o.subtotal)}</b></div>${o.discount ? `<div class="disc"><span>الخصم ${esc(o.coupon || '')}</span><b>−${money(o.discount)}</b></div>` : ''}<div><span>${dgOnly ? 'التسليم' : 'التوصيل'}</span><b>${dgOnly ? 'رقمي' : o.shipping ? money(o.shipping) : 'مجاني'}</b></div><div class="grand"><span>المجموع</span><b>${money(o.total)}</b></div></div>
         </section>
 
         <section class="block">
           <h3>العميل</h3>
           <p class="cust-name">${esc(o.customer.name)}</p>
           <p class="muted" dir="ltr" style="text-align:right">${esc(o.customer.phone)}</p>
-          <p>${esc(o.customer.city)}، ${esc(o.customer.address)}</p>
+          ${o.customer.email ? `<p dir="ltr" style="text-align:right"><a href="mailto:${esc(o.customer.email)}">${esc(o.customer.email)}</a></p>` : ''}
+          ${o.customer.address ? `<p>${esc(o.customer.city)}، ${esc(o.customer.address)}</p>` : dgOnly ? '<p class="muted">طلب رقمي، ما في عنوان شحن.</p>' : ''}
           ${o.customer.notes ? `<p class="quote">${esc(o.customer.notes)}</p>` : ''}
           <div class="row-btns">
             ${wa ? `<a class="btn" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener noreferrer">${ic('whatsapp')}واتساب</a>` : ''}
             ${wa ? `<a class="btn" href="tel:+${wa}">${ic('phone')}اتصال</a>` : ''}
           </div>
         </section>
+
+        ${dgItems.length ? `<section class="block dl-block">
+          <h3>${ic('download')}تسليم المنتج الرقمي</h3>
+          <p class="muted tiny">حط رابط التحميل (Google Drive أو Dropbox أو غيره) وابعته للزبون. ${o.paid ? '' : '<b>الطلب لسا مش مدفوع.</b>'}</p>
+          <label class="f"><span>رابط التحميل</span><input id="dlLink" type="url" dir="ltr" placeholder="https://drive.google.com/…" value="${esc(o.dlLink || '')}"></label>
+          <div class="row-btns">
+            ${wa ? '<button class="btn violet" type="button" id="dlWa">' + ic('whatsapp') + 'ابعت على واتساب</button>' : ''}
+            ${o.customer.email ? '<button class="btn" type="button" id="dlMail">' + ic('send') + 'ابعت بالإيميل</button>' : ''}
+          </div>
+        </section>` : ''}
 
         <section class="block">
           <h3>ملاحظة داخلية</h3>
@@ -796,6 +811,17 @@
       if (CLOUD) { try { await cloudDo(() => cloudApi.patchOrder(o.id, { note: v }), 'انحفظت الملاحظة'); } catch { return; } }
       o.note = v; save();
     });
+    if (dgItems.length) {
+      const link = () => {
+        const v = S.safeUrl($('#dlLink').value);
+        if (!v) { toast('حط رابط تحميل صحيح بيبلّش بـ https://'); $('#dlLink').focus(); return ''; }
+        if (!CLOUD && o.dlLink !== v) { o.dlLink = v; save(); }
+        return v;
+      };
+      const text = (v) => `مرحبا ${o.customer.name}، شكراً لشرائك من ${state.settings.name || 'متجرنا'}!\nطلبك ${o.id}: ${dgItems.map((x) => x.name).join('، ')}\nرابط التحميل:\n${v}\nإذا واجهتك أي مشكلة بالتحميل، رد على هالرسالة.`;
+      $('#dlWa')?.addEventListener('click', () => { const v = link(); if (v) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text(v))}`, '_blank', 'noopener'); });
+      $('#dlMail')?.addEventListener('click', () => { const v = link(); if (v) location.href = `mailto:${encodeURIComponent(o.customer.email)}?subject=${encodeURIComponent(`رابط تحميل طلبك ${o.id}`)}&body=${encodeURIComponent(text(v))}`; });
+    }
   }
   async function setStatus(id, s) {
     const o = state.orders.find((x) => x.id === id); if (!o || o.status === s) return;
@@ -858,7 +884,7 @@
   function renderProducts() {
     const q = S.norm(pQuery);
     const list = state.products.filter((p) => {
-      if (pCat === 'hidden' ? !p.hidden : pCat === 'low' ? !(p.stock <= 3) : pCat !== 'all' && p.cat !== pCat) return false;
+      if (pCat === 'hidden' ? !p.hidden : pCat === 'low' ? (S.isDigital(p) || !(p.stock <= 3)) : pCat !== 'all' && p.cat !== pCat) return false;
       return !q || S.norm(`${p.name} ${p.store}`).includes(q);
     });
     const cats = new Map(state.categories.map((c) => [c.id, c.name]));
@@ -868,19 +894,19 @@
           ${p.featured ? `<span class="pc-flag" title="مميز">${ic('star')}</span>` : ''}
           ${p.hidden ? '<span class="badge st-cancel pc-hidden">مخفي</span>' : ''}
         </span>
-        <span class="pc-meta"><b>${esc(p.name)}</b><small>${esc(cats.get(p.cat) || 'بلا تصنيف')} · ${esc(p.store || '')}</small>
-          <span class="pc-row"><strong>${money(p.price)}</strong>${p.stock <= 0 ? '<span class="badge st-cancel">نفد</span>' : p.stock <= 3 ? `<span class="badge st-new">باقي ${num(p.stock)}</span>` : `<span class="muted">${num(p.stock)} بالمخزون</span>`}</span>
+        <span class="pc-meta"><b>${esc(p.name)}${S.isDigital(p) ? `<span class="digi-badge">رقمي${p.format ? ` · ${esc(p.format)}` : ''}</span>` : ''}</b><small>${esc(cats.get(p.cat) || 'بلا تصنيف')} · ${esc(p.store || '')}</small>
+          <span class="pc-row"><strong>${money(p.price)}</strong>${S.isDigital(p) ? `<span class="muted">${S.safeUrl(p.buyUrl) ? 'دفع وتحميل تلقائي' : 'طلب على واتساب'}</span>` : p.stock <= 0 ? '<span class="badge st-cancel">نفد</span>' : p.stock <= 3 ? `<span class="badge st-new">باقي ${num(p.stock)}</span>` : `<span class="muted">${num(p.stock)} بالمخزون</span>`}</span>
         </span>
       </button>`).join('') : '') + `<button class="pc add-card" type="button" data-act="new-product">${ic('plus')}<b>منتج جديد</b></button>`;
   }
 
   function editProduct(id) {
     const isNew = !id;
-    const p0 = isNew ? { id: Math.max(0, ...state.products.map((x) => +x.id || 0)) + 1, name: '', store: state.settings.name, price: 0, compare: 0, stock: 10, cat: (state.categories[0] || {}).id || '', kind: 'tote', bg: '#efe8dc', fg: '#f4efe6', ac: '#8a6a4a', desc: '', featured: false, hidden: false, rating: 0, reviews: 0, images: [], options: [] }
+    const p0 = isNew ? { id: Math.max(0, ...state.products.map((x) => +x.id || 0)) + 1, type: 'digital', name: '', store: state.settings.name, price: 0, compare: 0, stock: 999, cat: (state.categories[0] || {}).id || '', kind: 'ebook', format: 'PDF', fileSize: '', details: '', buyUrl: '', previewUrl: '', bg: '#efe8dc', fg: '#f4efe6', ac: '#8a6a4a', desc: '', featured: false, hidden: false, rating: 0, reviews: 0, images: [], options: [] }
       : state.products.find((x) => x.id === id);
     if (!p0) return;
     const p = { ...p0, images: [...(p0.images && p0.images.length ? p0.images : (p0.img ? [p0.img] : []))], options: JSON.parse(JSON.stringify(p0.options || [])) };
-    const kinds = S.KINDS.map((k) => `<button type="button" class="kind${p.kind === k ? ' on' : ''}" data-kind="${k}" title="${S.KIND_NAMES[k]}" aria-label="${S.KIND_NAMES[k]}">${art({ kind: k, fg: '#665a54', ac: '#332f2d' })}</button>`).join('');
+    const kinds = [...S.DIGITAL_KINDS, ...S.KINDS.filter((k) => !S.DIGITAL_KINDS.includes(k))].map((k) => `<button type="button" class="kind${p.kind === k ? ' on' : ''}" data-kind="${k}" title="${S.KIND_NAMES[k]}" aria-label="${S.KIND_NAMES[k]}">${art({ kind: k, fg: '#665a54', ac: '#332f2d' })}</button>`).join('');
     openModal(`
       <form class="editor" id="editor" novalidate>
         <div class="modal-head"><h2>${isNew ? 'منتج جديد' : 'تعديل المنتج'}</h2><button class="icon-btn" type="button" data-act="close-modal" aria-label="إغلاق">${ic('close')}</button></div>
@@ -897,6 +923,10 @@
             </div>
           </div>
           <div class="editor-fields">
+            <div class="seg type-seg" role="radiogroup" aria-label="نوع المنتج">
+              <label><input type="radio" name="ptype" value="digital" ${S.isDigital(p) ? 'checked' : ''}><span>${ic('download')}منتج رقمي</span></label>
+              <label><input type="radio" name="ptype" value="physical" ${S.isDigital(p) ? '' : 'checked'}><span>${ic('inventory')}منتج عادي (شحن)</span></label>
+            </div>
             ${field('اسم المنتج', `<input name="name" value="${esc(p.name)}" required maxlength="80">`)}
             <div class="two">
               ${field('المتجر / الماركة', `<input name="store" value="${esc(p.store)}" maxlength="60">`)}
@@ -908,6 +938,16 @@
               ${field('المخزون', `<input name="stock" type="number" min="0" step="1" inputmode="numeric" value="${Number.isFinite(+p.stock) ? p.stock : ''}" dir="ltr" ${CLOUD && !isNew ? 'readonly title="الكمية بتتعدّل من صفحة المخزون ليتسجّل السبب"' : ''}>`, CLOUD && !isNew ? '<a href="#inventory/' + p.id + '">عدّل الكمية من المخزون</a>' : '')}
             </div>
             ${field('الوصف', `<textarea name="desc" rows="4" maxlength="2000">${esc(p.desc)}</textarea>`)}
+            <fieldset class="digi-ed" id="digiEd">
+              <legend>${ic('download')}التسليم الرقمي</legend>
+              <div class="two">
+                ${field('الصيغة', `<input name="format" value="${esc(p.format || '')}" maxlength="30" placeholder="PDF، MP4، ZIP، PSD…" list="fmtList"><datalist id="fmtList"><option value="PDF"><option value="EPUB"><option value="MP4"><option value="MP3"><option value="ZIP"><option value="PSD"><option value="Figma"><option value="Notion"><option value="Excel"></datalist>`)}
+                ${field('الحجم / المدة', `<input name="fileSize" value="${esc(p.fileSize || '')}" maxlength="40" placeholder="مثلاً: ١٢٠ صفحة · ٨ ميغا">`)}
+              </div>
+              ${field('شو بيحصل الزبون (سطر لكل نقطة)', `<textarea name="details" rows="3" maxlength="1500" placeholder="كتاب PDF من ١٢٠ صفحة&#10;ملف تمارين قابل للطباعة&#10;تحديثات مجانية مدى الحياة">${esc(p.details || '')}</textarea>`)}
+              ${field('رابط الدفع والتحميل التلقائي (اختياري)', `<input name="buyUrl" type="url" dir="ltr" value="${esc(p.buyUrl || '')}" placeholder="https://payhip.com/b/xxxx" maxlength="400">`, 'من Payhip أو Gumroad أو Lemon Squeezy: الزبون بيدفع هناك وبيوصله الملف لحاله. فاضي = الطلب بيوصلك على واتساب وبتبعت الملف إنت.')}
+              ${field('رابط معاينة مجانية (اختياري)', `<input name="previewUrl" type="url" dir="ltr" value="${esc(p.previewUrl || '')}" placeholder="https://… (عيّنة أو فيديو تعريفي)" maxlength="400">`)}
+            </fieldset>
             <div class="opts-ed">
               <div class="opts-head"><b>المواصفات</b><small class="muted">مثل المقاس أو اللون. الزبون لازم يختار قبل ما يضيف للسلة.</small></div>
               <div id="optRows"></div>
@@ -947,7 +987,13 @@
       name: $('.opt-name', r).value.trim(),
       values: $('.opt-vals', r).value.split(/[,،\n]/).map((v) => v.trim()).filter(Boolean).slice(0, 30),
     })).filter((o) => o.name && o.values.length);
-    preview(); paintOpts();
+    const syncType = () => {
+      const dg = f.ptype.value === 'digital';
+      $('#digiEd').hidden = !dg;
+      f.stock.closest('.f').hidden = dg;
+    };
+    preview(); paintOpts(); syncType();
+    f.addEventListener('change', (e) => { if (e.target.name === 'ptype') syncType(); });
     f.addEventListener('input', (e) => { if (!e.target.closest('.opt-row')) preview(); });
     $('#optAdd').addEventListener('click', () => { p.options = readOpts().concat([{ name: '', values: [] }]); paintOpts(); $('.opt-row:last-child .opt-name', f).focus(); });
     f.addEventListener('click', (e) => {
@@ -1004,14 +1050,21 @@
       const err = $('#edErr');
       if (!name) { err.textContent = 'اكتب اسم المنتج.'; err.hidden = false; f.name.focus(); return; }
       if (!(price >= 0) || f.price.value === '') { err.textContent = 'اكتب سعر صحيح.'; err.hidden = false; f.price.focus(); return; }
+      const digital = f.ptype.value === 'digital';
+      for (const k of ['buyUrl', 'previewUrl']) {
+        if (digital && f[k].value.trim() && !S.safeUrl(f[k].value)) { err.textContent = 'الرابط لازم يبلّش بـ https:// وبلا مسافات.'; err.hidden = false; f[k].focus(); return; }
+      }
       Object.assign(p, {
         name, store: f.store.value.trim(), cat: f.cat ? f.cat.value : '', price: Math.round(price * 100) / 100,
         compare: +f.compare.value > price ? Math.round(+f.compare.value * 100) / 100 : 0,
-        stock: f.stock.value === '' ? 999 : Math.max(0, Math.floor(+f.stock.value)),
+        stock: digital ? 999 : f.stock.value === '' ? 999 : Math.max(0, Math.floor(+f.stock.value)),
         desc: f.desc.value.trim(), featured: f.featured.checked, hidden: !f.visible.checked,
         options: readOpts(), img: p.images[0] || '',
       });
+      if (digital) Object.assign(p, { type: 'digital', format: f.format.value.trim(), fileSize: f.fileSize.value.trim(), details: f.details.value.trim(), buyUrl: S.safeUrl(f.buyUrl.value), previewUrl: S.safeUrl(f.previewUrl.value) });
+      else ['type', 'format', 'fileSize', 'details', 'buyUrl', 'previewUrl'].forEach((k) => delete p[k]);
       let saved = { ...p };
+      ['format', 'fileSize', 'details', 'buyUrl', 'previewUrl'].forEach((k) => { if (!saved[k]) delete saved[k]; });
       if (!saved.compare) delete saved.compare;
       if (!saved.img) delete saved.img;
       if (CLOUD) {
@@ -1452,7 +1505,7 @@
   const REASONS = { restock: 'توريد بضاعة', count: 'جرد', damage: 'تالف/مفقود', return: 'مرتجع', manual: 'تعديل يدوي', order: 'طلب', cancel: 'إلغاء طلب', reopen: 'إعادة فتح طلب', initial: 'كمية البداية' };
   let invFilter = 'all', invQuery = '';
   VIEWS.inventory = (arg) => {
-    const ps = state.products;
+    const ps = state.products.filter((p) => !S.isDigital(p));
     const th = (p) => (Number.isFinite(+p.threshold) ? +p.threshold : 5);
     const out = ps.filter((p) => p.stock <= 0).length, low = ps.filter((p) => p.stock > 0 && p.stock <= th(p)).length;
     const units = ps.reduce((s2, p) => s2 + Math.max(0, +p.stock || 0), 0);
@@ -1467,6 +1520,7 @@
       <div class="toolbar"><label class="search">${ic('search')}<input type="search" id="iq" placeholder="ابحث عن منتج…" value="${esc(invQuery)}"></label></div>
       <div class="chips" role="group">${[['all', 'الكل'], ['low', 'قليل'], ['out', 'نفد']].map(([k, t]) => `<button type="button" data-invf="${k}" aria-pressed="${invFilter === k}">${t}</button>`).join('')}</div>
       <div id="invList"></div>
+      ${state.products.some(S.isDigital) ? `<p class="muted pad">${num(state.products.filter(S.isDigital).length)} منتج رقمي ما إله مخزون، فما بيظهر هون.</p>` : ''}
       ${CLOUD ? '' : '<p class="muted pad">سجل حركات المخزون والتنبيهات التلقائية بيشتغلوا بعد ربط السيرفر. هون فيك تعدّل الكميات وتنشرها.</p>'}`;
     $('#iq').addEventListener('input', (e) => { invQuery = e.target.value; renderInv(); });
     renderInv();
@@ -1474,7 +1528,7 @@
   };
   function renderInv() {
     const q = S.norm(invQuery), th = (p) => (Number.isFinite(+p.threshold) ? +p.threshold : 5);
-    const list = state.products.filter((p) => (invFilter === 'all' || (invFilter === 'out' ? p.stock <= 0 : p.stock > 0 && p.stock <= th(p))) && (!q || S.norm(`${p.name} ${p.store}`).includes(q)))
+    const list = state.products.filter((p) => !S.isDigital(p) && (invFilter === 'all' || (invFilter === 'out' ? p.stock <= 0 : p.stock > 0 && p.stock <= th(p))) && (!q || S.norm(`${p.name} ${p.store}`).includes(q)))
       .sort((a, b) => (a.stock - th(a)) - (b.stock - th(b)));
     $('#invList').innerHTML = list.length ? `<div class="table-card"><table class="table">
       <thead><tr><th>المنتج</th><th class="num">الكمية</th><th class="hide-sm num">حد التنبيه</th><th>الحالة</th><th class="num">تعديل سريع</th></tr></thead>

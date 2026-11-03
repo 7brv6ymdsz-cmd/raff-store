@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const STORE_JSON = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data/store.json');
+const STORE_JSON = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/store.json');
 export const MOCK_URL = 'https://test-raff.supabase.co';
 export const MOCK_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.anon-key-for-tests';
 

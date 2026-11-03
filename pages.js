@@ -17,6 +17,7 @@
     heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.3 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
     out: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 16l-4-4 4-4M6 12h10"/>',
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     truck: '<path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
     card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>',
     undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
@@ -123,6 +124,9 @@
     const related = P.filter((x) => x.id !== p.id && x.cat === p.cat).concat(P.filter((x) => x.id !== p.id && x.cat !== p.cat && x.store === p.store)).slice(0, 8);
     const sh = (R().CFG.shipping || {});
     const pay = R().CFG.payments || {};
+    const dg = S.isDigital(p), buyUrl = dg ? S.safeUrl(p.buyUrl) : '', prevUrl = dg ? S.safeUrl(p.previewUrl) : '';
+    const payNames = [!dg && pay.cod && pay.cod.on ? 'عند الاستلام' : '', pay.paypal && pay.paypal.on ? 'PayPal أو بطاقة' : '', pay.bank && pay.bank.on ? 'تحويل بنكي' : ''].filter(Boolean).join(' · ');
+    const specs = dg ? [['النوع', S.KIND_NAMES[p.kind] || 'منتج رقمي'], ['الصيغة', p.format], ['الحجم', p.fileSize], ['التسليم', buyUrl ? 'تحميل فوري بعد الدفع' : 'رابط تحميل بعد تأكيد الدفع']].filter((x) => x[1]) : [];
     document.title = `${p.name} · ${R().CFG.name || ''}`;
     setMeta(p.desc || `${p.name} من ${p.store}`, {
       '@context': 'https://schema.org', '@type': 'Product', name: p.name, description: p.desc || '', brand: p.store ? { '@type': 'Brand', name: p.store } : undefined,
@@ -145,23 +149,28 @@
             <h1 class="pd-name">${esc(p.name)}</h1>
             ${p.reviews ? `<a class="pd-rating" href="#reviews" data-scroll-to="reviews">${stars(p.rating)}<span>${num(p.rating)} · ${compact(p.reviews)} تقييم</span></a>` : ''}
             <div class="pd-price"><b>${money(p.price)}</b>${save ? `<s>${money(p.compare)}</s><em>وفّر ${money(Math.round((p.compare - p.price) * 100) / 100)}</em>` : ''}</div>
-            <p class="pd-stock ${!R().inStock(p) ? 'out' : p.stock <= 5 ? 'low' : 'ok'}"><i></i>${!R().inStock(p) ? 'نفدت الكمية' : p.stock <= 5 ? `باقي ${num(p.stock)} قطع بس` : 'متوفر'}</p>
+            ${dg ? `<p class="pd-stock ok digi"><i></i>منتج رقمي${p.format ? ` · ${esc(p.format)}` : ''} · ${buyUrl ? 'تحميل فوري' : 'تحميل بعد الدفع'}</p>`
+    : `<p class="pd-stock ${!R().inStock(p) ? 'out' : p.stock <= 5 ? 'low' : 'ok'}"><i></i>${!R().inStock(p) ? 'نفدت الكمية' : p.stock <= 5 ? `باقي ${num(p.stock)} قطع بس` : 'متوفر'}</p>`}
             <form class="pd-buy" id="pdBuy">
               ${R().optionPicker(p, 'pd')}
               <div class="pd-actions">
-                <div class="stepper" role="group" aria-label="الكمية"><button type="button" data-step="-1" aria-label="أقل">−</button><input id="pdQty" type="number" min="1" max="${p.stock > 0 ? Math.min(p.stock, 50) : 1}" value="1" inputmode="numeric" aria-label="الكمية"><button type="button" data-step="1" aria-label="أكتر">+</button></div>
-                <button class="btn-violet grow" type="submit" ${R().inStock(p) ? '' : 'disabled'}>${R().inStock(p) ? 'أضف إلى السلة' : 'نفد من المخزون'}</button>
+                ${buyUrl ? `<a class="btn-violet grow" id="pdExt" href="${esc(buyUrl)}" target="_blank" rel="noopener noreferrer">${svg('download')}اشترِ الآن · تحميل فوري</a>` : ''}
+                <div class="stepper" role="group" aria-label="الكمية" ${dg ? 'hidden' : ''}><button type="button" data-step="-1" aria-label="أقل">−</button><input id="pdQty" type="number" min="1" max="${p.stock > 0 ? Math.min(p.stock, 50) : 1}" value="1" inputmode="numeric" aria-label="الكمية"><button type="button" data-step="1" aria-label="أكتر">+</button></div>
+                <button class="btn-violet grow" type="submit" ${R().inStock(p) ? '' : 'disabled'} ${buyUrl ? 'hidden' : ''}>${R().inStock(p) ? 'أضف إلى السلة' : 'نفد من المخزون'}</button>
                 <button class="icon-round" type="button" data-save="${p.id}" aria-pressed="${D.wishlist.has(p.id)}" aria-label="المفضلة">${svg('heart')}</button>
                 <button class="icon-round" type="button" id="pdShare" aria-label="مشاركة">${svg('share')}</button>
               </div>
-              <button class="btn-dark wide" type="button" id="pdBuyNow" ${R().inStock(p) ? '' : 'hidden'}>اشترِ الآن</button>
+              <button class="btn-dark wide" type="button" id="pdBuyNow" ${R().inStock(p) && !buyUrl ? '' : 'hidden'}>اشترِ الآن</button>
+              ${prevUrl ? `<a class="btn-ghost wide pd-preview" href="${esc(prevUrl)}" target="_blank" rel="noopener noreferrer">${svg('eye')}معاينة مجانية</a>` : ''}
             </form>
+            ${specs.length ? `<dl class="pd-specs">${specs.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : ''}
             <ul class="pd-trust">
-              <li>${svg('truck')}<span><b>${sh.freeOver > 0 ? `توصيل مجاني فوق ${money(sh.freeOver)}` : sh.fee ? `التوصيل ${money(sh.fee)}` : 'توصيل مجاني'}</b><small>منأكد معك الموعد قبل الشحن</small></span></li>
-              <li>${svg('card')}<span><b>${[pay.cod && pay.cod.on ? 'عند الاستلام' : '', pay.paypal && pay.paypal.on ? 'PayPal أو بطاقة' : '', pay.bank && pay.bank.on ? 'تحويل بنكي' : ''].filter(Boolean).join(' · ') || 'الدفع عند الاستلام'}</b><small>ما منطلب أرقام بطاقات على الموقع</small></span></li>
-              <li>${svg('undo')}<span><b>إرجاع خلال ١٤ يوم</b><small>إذا المنتج ما عجبك أو وصل فيه عيب</small></span></li>
+              ${dg ? `<li>${svg('download')}<span><b>${buyUrl ? 'تحميل فوري بعد الدفع' : 'رابط التحميل بعد تأكيد الدفع'}</b><small>${buyUrl ? 'الرابط بيوصلك على إيميلك تلقائياً' : 'منبعتلك الرابط على الإيميل أو واتساب'}</small></span></li>` : `<li>${svg('truck')}<span><b>${sh.freeOver > 0 ? `توصيل مجاني فوق ${money(sh.freeOver)}` : sh.fee ? `التوصيل ${money(sh.fee)}` : 'توصيل مجاني'}</b><small>منأكد معك الموعد قبل الشحن</small></span></li>`}
+              <li>${svg('card')}<span><b>${buyUrl ? 'دفع آمن بالبطاقة أو PayPal' : payNames || (dg ? 'تواصل معنا للدفع' : 'الدفع عند الاستلام')}</b><small>ما منطلب أرقام بطاقات على الموقع</small></span></li>
+              <li>${svg('undo')}<span><b>${dg ? 'ضمان استرداد' : 'إرجاع خلال ١٤ يوم'}</b><small>${dg ? 'إذا الملف ما اشتغل أو ما طابق الوصف' : 'إذا المنتج ما عجبك أو وصل فيه عيب'}</small></span></li>
             </ul>
             ${p.desc ? `<div class="pd-desc"><h2>عن المنتج</h2><p>${esc(p.desc).replace(/\n/g, '<br>')}</p></div>` : ''}
+            ${dg && p.details ? `<div class="pd-desc"><h2>شو بتحصل</h2><ul class="pd-gets">${String(p.details).split('\n').map((x) => x.trim()).filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
           </div>
         </div>
 
@@ -190,7 +199,7 @@
       return R().addToCart(p.id, Math.max(1, +qty.value || 1), o);
     };
     form.addEventListener('submit', (e) => { e.preventDefault(); add(); });
-    $('#pdBuyNow').addEventListener('click', () => { if (add()) { R().openCart(); setTimeout(() => $('[data-action="checkout"]').click(), 60); } });
+    $('#pdBuyNow').addEventListener('click', () => { if ((dg && R().qtyOf(p.id) > 0) || add()) { R().openCart(); setTimeout(() => $('[data-action="checkout"]').click(), 60); } });
     $('#pdShare').addEventListener('click', async () => {
       const url = location.href;
       try { if (navigator.share) await navigator.share({ title: p.name, url }); else { await navigator.clipboard.writeText(url); R().toast('انسخ رابط المنتج'); } } catch { /* cancelled */ }
@@ -586,7 +595,7 @@
           <div class="pg-card">
             <h3>المنتجات</h3>
             <ul class="od-items">${o.items.map((x) => { const p = R().byId.get(+x.id); return `<li>${p ? `<a href="#/p/${p.id}" class="od-th" style="--bg:${S.hex(p.bg, '#efe8dc')}">${R().art(p)}</a>` : '<span class="od-th"></span>'}<div><b>${esc(x.name)}</b><small>${esc(R().optsText(x.options))}${R().optsText(x.options) ? ' · ' : ''}${money(x.price)} × ${num(x.qty)}</small>${o.status === 'delivered' && p && cloud && D.auth.user ? `<a class="od-review" href="#/p/${p.id}">قيّم المنتج</a>` : ''}</div><span>${money(x.price * x.qty)}</span></li>`; }).join('')}</ul>
-            <div class="od-sums"><div><span>المنتجات</span><b>${money(o.subtotal)}</b></div>${o.discount ? `<div><span>الخصم ${esc(o.coupon || '')}</span><b>−${money(o.discount)}</b></div>` : ''}<div><span>التوصيل</span><b>${o.shipping ? money(o.shipping) : 'مجاني'}</b></div><div class="g"><span>المجموع</span><b>${money(o.total)}</b></div></div>
+            <div class="od-sums"><div><span>المنتجات</span><b>${money(o.subtotal)}</b></div>${o.discount ? `<div><span>الخصم ${esc(o.coupon || '')}</span><b>−${money(o.discount)}</b></div>` : ''}<div><span>${o.items.every((x) => x.digital) ? 'التسليم' : 'التوصيل'}</span><b>${o.items.every((x) => x.digital) ? 'رقمي' : o.shipping ? money(o.shipping) : 'مجاني'}</b></div><div class="g"><span>المجموع</span><b>${money(o.total)}</b></div></div>
           </div>
           <div class="pg-card">
             <h3>الدفع</h3><p>${esc(S.METHODS[o.method] || '')}</p><p class="${o.paid ? 'ok' : 'muted'}">${o.paid ? 'مدفوع ✓' : 'لسا ما اندفع'}</p>
@@ -741,8 +750,14 @@
     document.title = `من نحن · ${c.name || ''}`;
     page.innerHTML = infoShell(`عن ${esc(c.name || 'المتجر')}`, paras(pagesCfg().about) || `<p>${esc(c.name || 'متجرنا')} بيجمعلك منتجات مختارة بعناية، وبيوصلها لعندك بسهولة وأمان.</p><p>منهتم بكل طلب كأنه الوحيد، ومنحب نسمع رأيك.</p>`, esc(c.tagline || ''));
   };
+  const digitalStore = () => { const P = R().P || []; return P.length > 0 && P.every((x) => S.isDigital(x)); };
   ROUTES.shipping = async () => {
     const c = cfg(), sh = c.shipping || {}, money = R().money;
+    if (digitalStore()) {
+      document.title = `التسليم والتحميل · ${c.name || ''}`;
+      page.innerHTML = infoShell('التسليم والتحميل', `<ul class="facts"><li><b>رقمي</b><span>ما في شحن</span></li><li><b>فوري</b><span>للمنتجات بدفع إلكتروني</span></li><li><b>مجاني</b><span>رسوم التسليم</span></li></ul>` + (paras(pagesCfg().shipping) || '<p>كل منتجاتنا رقمية، يعني ما في شحن ولا انتظار. إذا اشتريت بالدفع الإلكتروني، بيوصلك رابط التحميل فوراً على إيميلك.</p><p>إذا طلبت عن طريق واتساب، منبعتلك رابط التحميل على إيميلك أو واتساب أول ما يتأكد الدفع، عادةً خلال ساعات.</p><p>ما وصلك الرابط؟ تواصل معنا برقم الطلب ومنحلّها فوراً.</p>'));
+      return;
+    }
     document.title = `التوصيل · ${c.name || ''}`;
     const facts = `<ul class="facts">
       <li><b>${sh.fee ? money(sh.fee) : 'مجاني'}</b><span>رسوم التوصيل</span></li>
@@ -753,6 +768,7 @@
   ROUTES.returns = async () => {
     const c = cfg();
     document.title = `الإرجاع · ${c.name || ''}`;
+    if (digitalStore() && !paras(pagesCfg().returns)) { page.innerHTML = infoShell('الاسترداد', '<p>لأنها منتجات رقمية، ما فينا نسترجع الملف بعد تحميله. بس إذا الملف ما اشتغل معك، أو ما طابق الوصف، تواصل معنا خلال ١٤ يوم من الشراء ومنصلّح المشكلة أو منرجّعلك المبلغ كامل.</p><p>ابعتلنا رقم الطلب ووصف المشكلة، ومنرد عليك بأسرع وقت.</p>'); return; }
     page.innerHTML = infoShell('الإرجاع والاستبدال', paras(pagesCfg().returns) || '<p>فيك ترجع أو تبدّل المنتج خلال ١٤ يوم من استلامه، إذا كان بحالته الأصلية، أو إذا وصلك فيه عيب.</p><p>تواصل معنا برقم الطلب ومنرتّب الاستلام. بنرجّعلك المبلغ بنفس طريقة الدفع خلال أيام من وصول المنتج.</p>');
   };
   ROUTES.faq = async () => {
@@ -761,10 +777,10 @@
     const raw = pagesCfg().faq;
     const items = raw ? raw.split(/\n\s*\n/).map((b) => b.trim().split('\n')).filter((l) => l[0]).map(([q, ...a]) => [q, a.join('\n')])
       : [
-        ['كيف بدفع؟', `${[(c.payments || {}).cod && c.payments.cod.on ? 'نقداً عند الاستلام' : '', (c.payments || {}).paypal && c.payments.paypal.on ? 'عبر PayPal أو ببطاقتك على صفحة PayPal' : '', (c.payments || {}).bank && c.payments.bank.on ? 'بتحويل بنكي' : ''].filter(Boolean).join('، ') || 'نقداً عند الاستلام'}. ما منطلب أرقام بطاقات على موقعنا.`],
-        ['قديش التوصيل؟', sh.fee ? `${money(sh.fee)}${sh.freeOver > 0 ? `، ومجاني للطلبات فوق ${money(sh.freeOver)}` : ''}.` : 'التوصيل مجاني.'],
+        ['كيف بدفع؟', `${[(c.payments || {}).cod && c.payments.cod.on && !digitalStore() ? 'نقداً عند الاستلام' : '', (c.payments || {}).paypal && c.payments.paypal.on ? 'عبر PayPal أو ببطاقتك على صفحة PayPal' : '', (c.payments || {}).bank && c.payments.bank.on ? 'بتحويل بنكي' : ''].filter(Boolean).join('، ') || (digitalStore() ? 'بالدفع الإلكتروني من صفحة المنتج، أو تواصل معنا على واتساب' : 'نقداً عند الاستلام')}. ما منطلب أرقام بطاقات على موقعنا.`],
+        ...(digitalStore() ? [['كيف بستلم المنتج؟', 'كل منتجاتنا رقمية. بعد الدفع بيوصلك رابط التحميل على إيميلك، أو منبعتلك ياه على واتساب إذا طلبت من هناك.'], ['ما وصلني رابط التحميل، شو بعمل؟', 'شيّك مجلد الرسائل غير المرغوبة (Spam)، وإذا ما لقيته تواصل معنا برقم الطلب ومنبعتلك ياه من جديد.']] : [['قديش التوصيل؟', sh.fee ? `${money(sh.fee)}${sh.freeOver > 0 ? `، ومجاني للطلبات فوق ${money(sh.freeOver)}` : ''}.` : 'التوصيل مجاني.']]),
         ['كيف بتابع طلبي؟', 'من صفحة «تتبّع طلبك» برقم الطلب ورقم هاتفك، أو من «طلباتي» إذا عندك حساب.'],
-        ['فيني رجّع المنتج؟', 'أكيد، خلال ١٤ يوم من الاستلام. التفاصيل بصفحة الإرجاع.'],
+        digitalStore() ? ['فيني أسترد المبلغ؟', 'إذا الملف ما اشتغل أو ما طابق الوصف، خلال ١٤ يوم. التفاصيل بصفحة الاسترداد.'] : ['فيني رجّع المنتج؟', 'أكيد، خلال ١٤ يوم من الاستلام. التفاصيل بصفحة الإرجاع.'],
         ['لازم أعمل حساب لأطلب؟', 'لا، فيك تطلب كضيف. الحساب بيسهّل عليك تتابع طلباتك وتحفظ عناوينك ومفضّلتك.'],
       ];
     page.innerHTML = infoShell('الأسئلة الشائعة', `<div class="faq-list">${items.map(([q, a], i) => `<details ${i === 0 ? 'open' : ''}><summary>${esc(q)}</summary><div>${paras(a) || ''}</div></details>`).join('')}</div>`);
