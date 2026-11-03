@@ -42,9 +42,11 @@
   const safeImg = (s) => (typeof s === 'string' && (/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(s) || /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/[\w\-./%]+$/.test(s)) ? s
     : typeof s === 'string' && /^(?:\.{0,2}\/)?[\w\-./]+\.(png|jpe?g|webp|gif|svg)$/i.test(s) && !s.includes('..//') ? s : '');
 
+  // pages outside the site root (the admin) prefix relative product images
+  const imgBase = /\/admin\/[^/]*$/.test(location.pathname) ? '../' : '';
   const art = (p) => {
     const img = safeImg(p.img);
-    if (img) return `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">`;
+    if (img) return `<img src="${esc(/^(data:|https:)/.test(img) ? img : imgBase + img.replace(/^\.\//, ''))}" alt="" loading="lazy" decoding="async">`;
     const draw = ART[p.kind] || ART.tote;
     return `<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><ellipse cx="50" cy="83" rx="28" ry="3" fill="#000" opacity=".08"/>${draw(hex(p.fg, '#efe8dc'), hex(p.ac, '#665a54'))}</svg>`;
   };

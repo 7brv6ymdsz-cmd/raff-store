@@ -104,3 +104,21 @@ test('admin: new products are digital, links are validated, inventory skips them
   await expect(page.locator('#view')).toContainText('منتج رقمي ما إله مخزون');
   await expect(page.locator('#invList')).not.toContainText('كتابي الأول');
 });
+
+test('the real catalog: every product is digital, priced, and its images and free preview exist', async () => {
+  const fs = await import('node:fs');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const store = JSON.parse(fs.readFileSync(path.join(root, 'data/store.json'), 'utf8'));
+  expect(store.products.length).toBeGreaterThanOrEqual(6);
+  for (const p of store.products) {
+    expect(p.type, p.name).toBe('digital');
+    expect(p.demo, p.name).toBeFalsy();
+    expect(p.price, p.name).toBeGreaterThan(0);
+    expect(store.categories.some((c) => c.id === p.cat), p.name).toBe(true);
+    for (const img of p.images) expect(fs.existsSync(path.join(root, img)), img).toBe(true);
+    if (p.previewUrl) {
+      expect(p.previewUrl).toMatch(/^https:\/\/7brv6ymdsz-cmd\.github\.io\/raff-store\/previews\//);
+      expect(fs.existsSync(path.join(root, p.previewUrl.split('/raff-store/')[1])), p.previewUrl).toBe(true);
+    }
+  }
+});
