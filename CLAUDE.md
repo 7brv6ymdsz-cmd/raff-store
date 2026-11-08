@@ -141,6 +141,13 @@ PGUSER=postgres PGHOST=/tmp/pgt PGPORT=5499 npm run test:db
 
 - Playwright uses the preinstalled Chromium at `/opt/pw-browsers/chromium` (`playwright.config.js`). Don't run
   `playwright install`.
+- **A few long end-to-end tests are flaky on a slow or busy container.** On 2026-11-08, in a fresh container, these
+  failed now and then in full runs and passed when run alone: `members`, `cloud`, `first-sale`, `operations`,
+  `digital`.
+  - Re-run the failures on their own, or the whole suite with `--workers=1`, before you treat one as a bug. CI retries
+    once.
+  - When writing tests, wait for the saved row or text. An empty Mizan table shows one placeholder row, so a
+    `toHaveCount(1)` alone can pass before a save lands.
 - CI (`.github/workflows/ci.yml`) runs lint, the database tests and Playwright on every push to `main`.
 - Before you push, run all three locally.
 - So far, changes have been committed straight to `main` once everything passed, and the owner checks the live site.
@@ -153,7 +160,8 @@ Done and tested:
 - Billing webhook and checkout prefill.
 - Halal screening (SQL and browser), with consent at sign-up.
 - Legal pages, the brand kit and the setup guide.
-- All tests pass: Playwright, SQL and lint.
+- Lint and the SQL tests pass. Playwright passes in CI, which retries once; locally a few long tests are flaky
+  (see Commands).
 
 Waiting on the owner. `docs/SETUP-AR.md` has their steps in Arabic:
 1. Create the Supabase project, run `setup.sql`, fill in `config.js`, and sign up the first account, which becomes

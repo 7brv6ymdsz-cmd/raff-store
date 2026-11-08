@@ -27,6 +27,8 @@ test('Mizan: locked → subscribed → every section works → locks again when 
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   const email = `amal${info.project.name}@test.com`;
+  // saved rows only: an empty table shows one "nothing yet" row, which must not satisfy a count before a save lands
+  const rows = page.locator('.mz-table tbody tr:not(:has(td[colspan]))');
 
   await test.step('signed out: asked to sign in', async () => {
     await page.goto('#/mizan');
@@ -72,12 +74,12 @@ test('Mizan: locked → subscribed → every section works → locks again when 
     await page.fill('#mzEntry [name=amount]', '500');
     await page.fill('#mzEntry [name=description]', 'تصميم هوية');
     await page.click('#mzEntry [type=submit]');
-    await expect(page.locator('.mz-table tbody tr')).toHaveCount(1);
+    await expect(rows).toHaveCount(1);
     await page.selectOption('#mzEntry [name=kind]', 'expense');
     await expect(page.locator('#mzEntry [name=category] option').first()).toHaveText('مواد وتكلفة بضاعة');
     await page.fill('#mzEntry [name=amount]', '١٢٠'); // Arabic digits are accepted
     await page.click('#mzEntry [type=submit]');
-    await expect(page.locator('.mz-table tbody tr')).toHaveCount(2);
+    await expect(rows).toHaveCount(2);
     await expect(page.locator('.mz-sum')).toContainText('٣٨٠');
     expect(mock.db.mizan_entries.map((e) => [e.kind, e.amount])).toEqual(expect.arrayContaining([['income', 500], ['expense', 120]]));
 
@@ -92,7 +94,7 @@ test('Mizan: locked → subscribed → every section works → locks again when 
     await page.fill('#mzClient [name=name]', 'شركة الأفق');
     await page.fill('#mzClient [name=email]', 'info@ofoq.example');
     await page.click('#mzClient [type=submit]');
-    await expect(page.locator('.mz-table tbody tr')).toHaveCount(1);
+    await expect(rows).toHaveCount(1);
 
     await page.goto('#/mizan/invoices');
     await page.click('[data-mz-newinv]');
@@ -102,7 +104,7 @@ test('Mizan: locked → subscribed → every section works → locks again when 
     await page.fill('#mzInv [name=tax]', '16');
     await expect(page.locator('#mzInvSum')).toContainText('٥٢٢');
     await page.click('#mzInv [type=submit]');
-    await expect(page.locator('.mz-table tbody tr')).toHaveCount(1);
+    await expect(rows).toHaveCount(1);
     await expect(page.locator('.mz-table tbody')).toContainText(`INV-${new Date().getFullYear()}-001`);
 
     await page.evaluate(() => { window.printed = 0; window.print = () => { window.printed += 1; }; });
