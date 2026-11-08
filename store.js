@@ -234,6 +234,7 @@
     if (line) line.qty += qty; else cart.push({ id, qty, options });
     persistCart(); renderCart(); bump($('#cartBadge'));
     toast(`انضاف «${p.name}» إلى السلة`);
+    if (window.RaffSound) window.RaffSound.play('pop');
     return true;
   };
   const changeQty = (key, d) => {

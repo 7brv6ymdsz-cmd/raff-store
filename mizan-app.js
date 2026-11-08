@@ -65,7 +65,7 @@
     try { const v = await fn(); return v ?? true; } catch (e) {
       let active = !locked(e);
       if (active) { try { const sub = must(await D.client.rpc('my_subscription')); active = !!(sub && sub.active); } catch { /* keep */ } }
-      if (!active) { st = null; toast('انتهى اشتراكك، فانقفل ميزان. بياناتك محفوظة.'); window.raffRouter.route(); return false; }
+      if (!active) { st = null; toast('ميزان انقفل (الاشتراك مش فعّال). بياناتك محفوظة.'); if (window.RaffSound) window.RaffSound.play('error'); window.raffRouter.route(); return false; }
       toast(D.friendly ? D.friendly(e) : e.message); return false;
     }
   }
@@ -102,6 +102,7 @@
     const head = {
       server: ['ميزان للمشتركين', 'لوحتك المالية بتفتح مع الاشتراك الشهري. الخدمة بتشتغل قريباً.'],
       login: ['ميزان للمشتركين', 'سجّل دخول لتفتح لوحتك المالية، أو اعمل حساب جديد واشترك.'],
+      blocked: ['الحساب موقوف', `انوقف حسابك لمخالفة سياسة الاستخدام الحلال${sub && sub.reason ? `: ${esc(sub.reason)}` : ''}. إذا شايف إنو صار خطأ، <a href="#/contact">راسلنا</a>.`],
       plan: sub && sub.status
         ? ['ميزان مقفول', `اشتراكك ${STATUS_WORDS[sub.status] || ''}${sub.current_period_end ? ` منذ ${day(sub.current_period_end)}` : ''}. بياناتك محفوظة، وبترجع كلها فور التجديد.`]
         : ['ميزان مقفول', 'ميزان بيفتح مع الاشتراك الشهري. اختار باقتك:'],
@@ -109,7 +110,7 @@
     page.innerHTML = `<div class="pg mz-lock">
       <div class="mz-lock-head"><span class="mz-lock-ic">${lockIcon}</span><h1 class="pg-title">${head[0]}</h1><p class="muted">${head[1]}</p></div>
       ${kind === 'login' ? '<div class="mz-lock-actions"><a class="btn-dark" href="#/login?next=mizan">تسجيل الدخول</a><a class="btn-ghost" href="#/signup?next=mizan">حساب جديد</a></div>' : ''}
-      ${planCards(kind === 'plan')}
+      ${kind === 'blocked' ? '' : planCards(kind === 'plan')}
       ${kind === 'plan' ? '<p class="mz-lock-foot muted">دفعت للتو؟ <button type="button" class="link-btn" data-mz-recheck>تحقّق من اشتراكي</button></p>' : ''}
     </div>`;
     const re = $('[data-mz-recheck]', page);
@@ -234,7 +235,7 @@
       if (+saved.day.slice(0, 4) === st.year) {
         st.entries = st.entries.filter((x) => x.id !== saved.id).concat(saved).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.id - a.id));
       } else st.entries = st.entries.filter((x) => x.id !== saved.id);
-      toast(st.edit ? 'انحفظ التعديل' : 'انضافت المعاملة'); st.edit = null; viewEntries();
+      toast(st.edit ? 'انحفظ التعديل' : 'انضافت المعاملة'); if (window.RaffSound) window.RaffSound.play('success'); st.edit = null; viewEntries();
     });
     const c = $('[data-mz-cancel]'); if (c) c.addEventListener('click', () => { st.edit = null; viewEntries(); });
     const refilter = () => { st.filter = { month: $('#mzFm').value, kind: $('#mzFk').value, q: $('#mzFq').value }; viewEntries(); };
@@ -335,7 +336,7 @@
       if (!v.items.length) { err.textContent = 'ضيف بند واحد على الأقل.'; err.hidden = false; return; }
       const saved = await guard(() => D.client.from('mizan_invoices').insert(v).select().single().then(must));
       if (saved === false || !st) return;
-      st.invoices.unshift(saved); toast('انحفظت الفاتورة'); viewInvoices();
+      st.invoices.unshift(saved); toast('انحفظت الفاتورة'); if (window.RaffSound) window.RaffSound.play('success'); viewInvoices();
     });
   }
   function printInvoice(inv) {
@@ -460,6 +461,7 @@
       page.innerHTML = '<div class="pg-loading"><span></span><span></span><span></span></div>';
       let sub = null;
       try { sub = must(await D.client.rpc('my_subscription')); } catch (e) { page.innerHTML = `<div class="pg narrow"><div class="pg-card center"><p class="form-err">${esc(D.friendly(e))}</p></div></div>`; return; }
+      if (sub && sub.blocked) { st = null; lockedView('blocked', sub); return; }
       if (!sub || !sub.active) { st = null; lockedView('plan', sub); return; }
       try { await load(sub); } catch (e) {
         if (locked(e)) { st = null; lockedView('plan', sub); return; }

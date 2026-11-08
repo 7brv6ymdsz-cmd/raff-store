@@ -130,7 +130,7 @@
     return lang === 'ar' ? R.money(p.price) : `${cur}${p.price}`;
   };
 
-  function mock(t, lang) {
+  function mock(t, lang, opts = {}) {
     const n = (v) => (lang === 'ar' ? S.num(v) : latin(v));
     const max = Math.max(...SAMPLE.inc, ...SAMPLE.exp);
     const bars = SAMPLE.inc.map((v, i) => {
@@ -142,7 +142,7 @@
     const ks = SAMPLE.k.map((v, i) => `<div class="m-k${i === 2 ? ' pos' : ''}"><span>${esc(t.mock.k[i])}</span><b>${i === 3 ? (lang === 'ar' ? `${S.num(Math.round(v * 100))}٪` : `${Math.round(v * 100)}%`) : n(v)}</b></div>`).join('');
     return `
       <div class="m-win" role="img" aria-label="${esc(t.mock.tabs[1])}">
-        <div class="m-bar"><i></i><i></i><i></i><span>${lang === 'ar' ? 'ميزان-عربي.xlsx' : 'Mizan-English.xlsx'}</span></div>
+        <div class="m-bar"><i></i><i></i><i></i><span>${esc(opts.label || (lang === 'ar' ? 'ميزان-عربي.xlsx' : 'Mizan-English.xlsx'))}</span></div>
         <div class="m-body">
           <div class="m-kpis">${ks}</div>
           <div class="m-grid">
@@ -150,7 +150,7 @@
             <div class="m-card"><p>${esc(t.mock.cats)}</p><ul class="m-cats">${cats}</ul></div>
           </div>
         </div>
-        <div class="m-tabs">${t.mock.tabs.map((x, i) => `<span class="${i === 1 ? 'on' : ''}">${esc(x)}</span>`).join('')}</div>
+        <div class="m-tabs">${(opts.tabs || t.mock.tabs).map((x, i) => `<span class="${i === (opts.tabs ? 0 : 1) ? 'on' : ''}">${esc(x)}</span>`).join('')}</div>
       </div>`;
   }
 
@@ -238,20 +238,22 @@
   let el = null, current = null;
   function render(lang) {
     const R = window.raff, L = (R.CFG || {}).landing || {};
-    const p = L.on ? R.byId.get(+L.pid) : null;
-    root.classList.toggle('landing', !!p);
-    root.classList.toggle('landing-en', !!p && lang === 'en');
-    setFlag(!!p);
+    const platform = !!(L.on && L.mode === 'platform' && window.RaffPlatform);
+    const p = !platform && L.on ? R.byId.get(+L.pid) : null;
+    const show = platform || !!p;
+    root.classList.toggle('landing', show);
+    root.classList.toggle('landing-en', show && lang === 'en');
+    setFlag(show);
     const skip = document.querySelector('.skip');
-    if (!p) { if (el) el.remove(); el = null; if (skip) skip.setAttribute('href', '#main'); ld(null); return; }
+    if (!show) { if (el) el.remove(); el = null; if (skip) skip.setAttribute('href', '#main'); ld(null); return; }
     if (skip) skip.setAttribute('href', '#l-hero');
-    current = { p, lang };
+    current = { p, lang, platform };
     if (!el) {
       el = document.createElement('div'); el.id = 'landing';
       document.querySelector('.page').prepend(el);
       el.addEventListener('click', onClick);
     }
-    el.innerHTML = html(R, p, lang);
+    el.innerHTML = platform ? window.RaffPlatform.html(R, lang, mock(T[lang], lang, lang === 'ar' ? { label: 'ميزان · لوحتك المالية', tabs: ['لوحة التحكم', 'المعاملات', 'الفواتير', 'العملاء', 'التسعير', 'الإعدادات'] } : { label: 'Mizan · your finances', tabs: ['Dashboard', 'Entries', 'Invoices', 'Clients', 'Pricing', 'Settings'] })) : html(R, p, lang);
     homeMeta();
     tilt();
   }
@@ -259,6 +261,12 @@
   // Title, description and Product structured data for the single-product home (search engines show the price).
   function homeMeta() {
     if (!current || root.classList.contains('route-page')) return;
+    if (current.platform) {
+      const m = window.RaffPlatform.meta(current.lang, window.raff);
+      document.title = m.title;
+      const d = document.querySelector('meta[name="description"]'); if (d) d.content = m.desc;
+      ld(m.ld); return;
+    }
     const t = T[current.lang], p = current.p, R = window.raff;
     document.title = t.title;
     const m = document.querySelector('meta[name="description"]'); if (m) m.content = t.desc;

@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 // These tests use the store's real published catalog (the single-product homepage for Mizan).
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const real = () => JSON.parse(fs.readFileSync(path.join(ROOT, 'data/store.json'), 'utf8'));
+// these tests cover the single-product mode; the live site uses the platform mode (tests/e2e/platform.spec.js)
+const productMode = (d) => { d.settings.landing = { on: true, pid: 8 }; d.products.find((p) => p.id === 8).hidden = false; };
 const serve = (page, edit) => page.route('**/data/store.json*', (route) => {
-  const d = real(); if (edit) edit(d);
+  const d = real(); productMode(d); if (edit) edit(d);
   return route.fulfill({ body: JSON.stringify(d), contentType: 'application/json' });
 });
 // sets the visitor's starting language once; a choice made on the page afterwards is kept across reloads

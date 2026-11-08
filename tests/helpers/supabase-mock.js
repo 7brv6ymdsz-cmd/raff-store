@@ -20,7 +20,7 @@ export function makeMock() {
     categories: cat.categories.map((c, i) => ({ id: c.id, name: c.name, color: c.c, sort: i })),
     products: cat.products.map((p) => ({ id: p.id, name: p.name, brand: p.store, category_id: p.cat, price: p.price, compare_at: null, stock: p.stock, description: p.desc, images: [], art: { kind: p.kind, bg: p.bg, fg: p.fg, ac: p.ac }, options: p.options || [], featured: p.featured, hidden: false, rating: p.rating, reviews_count: p.reviews, sort: 0, created_at: new Date().toISOString() })),
     admins: [], profiles: [], addresses: [], wishlist: [], orders: [], reviews: [], conversations: [], conversation_messages: [], product_questions: [], stock_movements: [], admin_notifications: [], audit_log: [],
-    subscriptions: [], mizan_books: [], mizan_entries: [], mizan_clients: [], mizan_invoices: [],
+    subscriptions: [], blocked_users: [], mizan_books: [], mizan_entries: [], mizan_clients: [], mizan_invoices: [],
     coupons: [{ code: 'WELCOME10', kind: 'percent', value: 10, min_subtotal: 0, starts_at: null, ends_at: null, max_uses: null, uses: 0, active: true, created_at: new Date().toISOString() }],
   };
   db.settings[0].data.payments = { cod: { on: true }, paypal: { on: true, user: 'raffshop' }, bank: { on: false } };
@@ -33,7 +33,10 @@ export function makeMock() {
   // mirrors public.subscription_active() in setup.sql
   const subOpen = (s) => !!s && ((['on_trial', 'active'].includes(s.status) && (!s.current_period_end || new Date(s.current_period_end) > new Date()))
     || (['past_due', 'cancelled'].includes(s.status) && !!s.current_period_end && new Date(s.current_period_end) > new Date()));
-  const subActive = (u) => !!u && subOpen(db.subscriptions.find((s) => s.user_id === u));
+  const isBlocked = (u) => db.blocked_users.some((b) => b.user_id === u);
+  const subActive = (u) => !!u && !isBlocked(u) && subOpen(db.subscriptions.find((s) => s.user_id === u));
+  const HARAM = { alcohol: ['نبيذ', 'خمور', 'خمر', 'بيره', 'wine', 'beer'], gambling: ['كازينو', 'قمار', 'casino'] };
+  const haram = (t) => { const s = ` ${String(t || '').toLowerCase().replace(/[^0-9a-z\u0621-\u064A]+/g, ' ').replace(/ة/g, 'ه')} `; return Object.keys(HARAM).filter((k) => HARAM[k].some((w) => ['', 'ال', 'و', 'وال', 'ب', 'بال'].some((p) => s.includes(` ${p}${w} `)))); };
   const MIZAN = ['mizan_books', 'mizan_entries', 'mizan_clients', 'mizan_invoices'];
   const setStock = (pr, next, reason, ref = '', note = '', actor = null) => {
     const before = pr.stock; pr.stock = Math.max(0, next);
@@ -164,7 +167,7 @@ export function makeMock() {
     },
     delete_my_account: (b, u) => { if (!u) throw new Error('not_signed_in'); if (isAdmin(u) && db.admins.length === 1) throw new Error('last_admin'); const i = users.findIndex((x) => x.id === u); users.splice(i, 1); db.profiles = db.profiles.filter((x) => x.id !== u); db.addresses = db.addresses.filter((x) => x.user_id !== u); db.wishlist = db.wishlist.filter((x) => x.user_id !== u); db.orders.forEach((o) => { if (o.user_id === u) o.user_id = null; }); return null; },
     subscription_active: (b, u) => subActive(u),
-    my_subscription: (b, u) => { const s = db.subscriptions.find((x) => x.user_id === u); return s ? { plan: s.plan, status: s.status, current_period_end: s.current_period_end, provider: s.provider, manage_url: s.manage_url || '', active: subActive(u) } : null; },
+    my_subscription: (b, u) => { const s = db.subscriptions.find((x) => x.user_id === u); const bl = db.blocked_users.find((x) => x.user_id === u); if (bl) return { blocked: true, reason: bl.reason, active: false, plan: s && s.plan, status: s && s.status }; return s ? { blocked: false, plan: s.plan, status: s.status, current_period_end: s.current_period_end, provider: s.provider, manage_url: s.manage_url || '', active: subActive(u) } : null; },
     admin_grant_subscription: (b, u) => {
       if (!hasRole(u, 'manager')) throw new Error('not_allowed');
       if (!['pro', 'business'].includes(b.p_plan)) throw new Error('bad_plan');
@@ -174,7 +177,9 @@ export function makeMock() {
       return row;
     },
     admin_end_subscription: (b, u) => { if (!hasRole(u, 'manager')) throw new Error('not_allowed'); const x = db.subscriptions.find((y) => y.user_id === b.p_user); if (!x) throw new Error('not_found'); Object.assign(x, { status: 'expired', current_period_end: new Date().toISOString() }); return null; },
-    admin_list_subscriptions: (b, u) => (hasRole(u, 'manager') ? db.subscriptions.map((x) => { const who = users.find((y) => y.id === x.user_id) || {}; return { user_id: x.user_id, email: who.email, full_name: (db.profiles.find((pr) => pr.id === x.user_id) || {}).full_name || '', plan: x.plan, status: x.status, current_period_end: x.current_period_end, provider: x.provider, active: subOpen(x), updated_at: x.updated_at }; }) : []),
+    admin_list_subscriptions: (b, u) => (hasRole(u, 'manager') ? db.subscriptions.map((x) => { const who = users.find((y) => y.id === x.user_id) || {}; const bl = db.blocked_users.find((y) => y.user_id === x.user_id); return { user_id: x.user_id, email: who.email, full_name: (db.profiles.find((pr) => pr.id === x.user_id) || {}).full_name || '', plan: x.plan, status: x.status, current_period_end: x.current_period_end, provider: x.provider, active: !bl && subOpen(x), blocked: !!bl, block_reason: bl ? bl.reason : '', updated_at: x.updated_at }; }) : []),
+    admin_block_member: (b, u) => { if (!hasRole(u, 'manager')) throw new Error('not_allowed'); if (isAdmin(b.p_user)) throw new Error('staff_member'); db.blocked_users = db.blocked_users.filter((x) => x.user_id !== b.p_user).concat({ user_id: b.p_user, reason: String(b.p_reason || '').slice(0, 300), blocked_at: new Date().toISOString() }); return null; },
+    admin_unblock_member: (b, u) => { if (!hasRole(u, 'manager')) throw new Error('not_allowed'); db.blocked_users = db.blocked_users.filter((x) => x.user_id !== b.p_user); return null; },
     admin_set_status: (b, u) => { if (!hasRole(u, 'manager', 'support')) throw new Error('not_allowed'); const o = db.orders.find((x) => x.id === b.p_id); o.status = b.p_status; o.history.push({ s: b.p_status, t: new Date().toISOString() }); if (b.p_status === 'delivered' && o.method === 'cod') o.paid = true; return o; },
   };
   const json = (route, status, body, headers = {}) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*', ...headers }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -225,6 +230,7 @@ export function makeMock() {
           const list = Array.isArray(body) ? body : [body];
           if ((adminTables.includes(table) || ['orders', 'conversations', 'conversation_messages', 'product_questions'].includes(table)) && !isAdmin(u)) return json(route, 403, { message: 'new row violates row-level security policy' });
           if (table === 'reviews' && !RPC.can_review({ p_product: list[0].product_id }, u)) return json(route, 403, { message: 'new row violates row-level security policy for table "reviews"' });
+          if (table === 'products') { const h = haram(list.map((x) => `${x.name || ''} ${x.brand || ''} ${x.description || ''}`).join(' ')); if (h.length) return json(route, 400, { code: 'P0001', message: `halal_blocked:${h.join(',')}` }); }
           if (table === 'subscriptions' || (MIZAN.includes(table) && !subActive(u))) return json(route, 403, { code: '42501', message: `new row violates row-level security policy for table "${table}"` });
           const out = list.map((r) => {
             const row = { ...r };

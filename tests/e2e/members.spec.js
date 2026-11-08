@@ -61,3 +61,47 @@ test('owner grants and ends a membership; the member sees Mizan open and then lo
   expect(errors).toEqual([]);
   await ctxA.close(); await ctxB.close();
 });
+
+test('a member suspended for breaking the halal policy loses Mizan until the owner lifts it; the server refuses haram products', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const mock = makeMock();
+  const ctxA = await browser.newContext(); await useFixture(ctxA); await attachMock(ctxA, mock);
+  const ctxB = await browser.newContext(); await useFixture(ctxB); await attachMock(ctxB, mock);
+  const admin = await ctxA.newPage(), member = await ctxB.newPage();
+  await admin.goto('admin/');
+  await admin.fill('#cEmail', 'owner@shop.test'); await admin.fill('#cPass', 'Owner-pass-123');
+  await admin.click('#lockSubmit');
+  await expect(admin.locator('#app')).toBeVisible();
+
+  await member.goto('#/signup?next=mizan');
+  await expect(member.locator('label.check a[href="#/halal"]')).toBeVisible(); // agreeing to the halal policy is part of signing up
+  await member.fill('[name=name]', 'سامر'); await member.fill('[name=email]', 'samer@test.com');
+  await member.fill('[name=phone]', '+962 79 555 6666'); await member.fill('[name=password]', 'Samer-pass-2026!');
+  await member.check('[name=terms]'); await member.click('#signupForm [type=submit]');
+  await expect(member.locator('.mz-lock h1')).toHaveText('ميزان مقفول');
+
+  await admin.goto('admin/#members');
+  await admin.fill('#subForm [name=email]', 'samer@test.com');
+  await admin.click('#subForm [type=submit]');
+  await expect(admin.locator('.table tbody')).toContainText('فعّال');
+  admin.once('dialog', (d) => d.accept('إعلانات قمار'));
+  await admin.click('[data-block]');
+  await expect(admin.locator('.table tbody')).toContainText('موقوف لمخالفة');
+
+  await member.click('[data-mz-recheck]');
+  await expect(member.locator('.mz-lock h1')).toHaveText('الحساب موقوف');
+  await expect(member.locator('.mz-lock')).toContainText('إعلانات قمار');
+  await expect(member.locator('.mz-plan-card')).toHaveCount(0);
+
+  await admin.click('[data-unblock]');
+  await expect(admin.locator('.table tbody')).toContainText('فعّال');
+  await member.reload();
+  await expect(member.locator('.mz-head')).toBeVisible();
+
+  // the server's own screen (cloud mode): a product saved around the browser check is refused with the halal message
+  const res = await admin.evaluate(async () => { const { error } = await window.RaffData.client.from('products').insert({ name: 'كازينو أونلاين', price: 1 }).select(); return error ? error.message : 'saved'; });
+  expect(res).toContain('halal_blocked');
+  const msg = await admin.evaluate(() => window.RaffData.friendly({ message: 'halal_blocked:gambling' }));
+  expect(msg).toContain('القمار');
+  await ctxA.close(); await ctxB.close();
+});

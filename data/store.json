@@ -1,9 +1,9 @@
 {
  "v": 1,
- "updated": "2026-11-08T10:30:00Z",
+ "updated": "2026-11-08T14:00:00Z",
  "settings": {
-  "name": "ميزان",
-  "tagline": "اعرف ربحك الحقيقي",
+  "name": "رواج",
+  "tagline": "خلّي شغلك يروج",
   "banner": "",
   "bannerSub": "",
   "currency": "$",
@@ -30,7 +30,34 @@
   },
   "landing": {
    "on": true,
+   "mode": "platform",
    "pid": 8
+  },
+  "billing": {
+   "plans": [
+    {
+     "id": "pro",
+     "name": "احترافي",
+     "price": 119,
+     "checkoutUrl": "",
+     "features": [
+      "ميزان كامل: الحسابات والفواتير والتسعير",
+      "مشروع واحد",
+      "مدير الإعلانات عند إطلاقه"
+     ]
+    },
+    {
+     "id": "business",
+     "name": "أعمال",
+     "price": 249,
+     "checkoutUrl": "",
+     "features": [
+      "كل شي بالاحترافي",
+      "حتى ٥ مشاريع",
+      "أولوية بالدعم ومدير الإعلانات"
+     ]
+    }
+   ]
   }
  },
  "categories": [
@@ -95,7 +122,7 @@
    ],
    "img": "assets/products/mizan-1.jpg",
    "featured": true,
-   "hidden": false
+   "hidden": true
   },
   {
    "id": 1,

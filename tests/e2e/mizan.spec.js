@@ -107,7 +107,7 @@ test('Mizan: locked → subscribed → every section works → locks again when 
 
     await page.evaluate(() => { window.printed = 0; window.print = () => { window.printed += 1; }; });
     await page.click('[data-mz-print]');
-    expect(await page.evaluate(() => window.printed)).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.printed)).toBe(1);
     await expect(page.locator('#mzPrint')).toContainText('info@ofoq.example');
     await page.click('[data-mz-income]');
     await expect.poll(() => mock.db.mizan_entries.length).toBe(3);

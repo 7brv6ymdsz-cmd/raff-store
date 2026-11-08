@@ -969,3 +969,135 @@ revoke execute on function public.admin_list_subscriptions() from public, anon;
 grant execute on function public.admin_list_subscriptions() to authenticated;
 revoke execute on function public.billing_upsert(uuid, text, text, text, timestamptz, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.billing_upsert(uuid, text, text, text, timestamptz, text, text, text, text) to service_role;
+
+-- =====================================================================
+-- Halal use: banned terms screened on the server, and suspension of accounts that break the policy.
+-- =====================================================================
+-- Lower-case, no diacritics or tatweel, one spelling for alef/yaa/taa marbuta, everything that is not a
+-- letter or digit becomes a space, padded with spaces so whole words can be matched with LIKE.
+create or replace function public.halal_normalize(t text)
+returns text language sql immutable as $$
+  select ' ' || btrim(regexp_replace(
+    translate(regexp_replace(lower(coalesce(t, '')), '[ً-ْـ]', '', 'g'), 'إأآٱىة', 'اااايه'),
+    '[^0-9a-zء-ي]+', ' ', 'g')) || ' ';
+$$;
+
+create table if not exists public.halal_terms (
+  term text primary key check (char_length(term) between 2 and 60),
+  category text not null check (category in ('alcohol', 'drugs', 'gambling', 'riba', 'adult', 'pork', 'sorcery', 'music', 'fraud')),
+  norm text generated always as (btrim(public.halal_normalize(term))) stored,
+  created_at timestamptz not null default now()
+);
+alter table public.halal_terms enable row level security;
+drop policy if exists "halal terms staff" on public.halal_terms;
+create policy "halal terms staff" on public.halal_terms for all using (public.has_role(array['manager'])) with check (public.has_role(array['manager']));
+insert into public.halal_terms (term, category) values
+  ('خمر','alcohol'),('خمور','alcohol'),('نبيذ','alcohol'),('بيره','alcohol'),('فودكا','alcohol'),('ويسكي','alcohol'),('عرق بلدي','alcohol'),('مشروبات روحيه','alcohol'),
+  ('alcohol','alcohol'),('beer','alcohol'),('wine','alcohol'),('vodka','alcohol'),('whisky','alcohol'),('whiskey','alcohol'),('liquor','alcohol'),
+  ('مخدرات','drugs'),('حشيش','drugs'),('سجائر','drugs'),('معسل','drugs'),('شيشه','drugs'),('فيب','drugs'),('cannabis','drugs'),('cigarettes','drugs'),('vape','drugs'),('tobacco','drugs'),('hookah','drugs'),
+  ('قمار','gambling'),('كازينو','gambling'),('مراهنه','gambling'),('مراهنات','gambling'),('يانصيب','gambling'),('روليت','gambling'),('بوكر','gambling'),
+  ('casino','gambling'),('gambling','gambling'),('betting','gambling'),('lottery','gambling'),('poker','gambling'),('roulette','gambling'),
+  ('ربا','riba'),('قرض بفائده','riba'),('قروض بفائده','riba'),('تمويل بفائده','riba'),('خيارات ثنائيه','riba'),('payday loan','riba'),('binary options','riba'),
+  ('اباحي','adult'),('اباحيه','adult'),('سكس','adult'),('تعارف وزواج مؤقت','adult'),('مواعده','adult'),('porn','adult'),('xxx','adult'),('escort','adult'),('dating app','adult'),
+  ('خنزير','pork'),('لحم خنزير','pork'),('pork','pork'),('bacon','pork'),
+  ('سحر اسود','sorcery'),('جلب الحبيب','sorcery'),('شعوذه','sorcery'),('شعوذة','sorcery'),('قراءه الطالع','sorcery'),('تاروت','sorcery'),('ابراج الحظ','sorcery'),('tarot','sorcery'),('horoscope','sorcery'),
+  ('حفله غنائيه','music'),('ملهى ليلي','music'),('ديسكو','music'),('nightclub','music'),
+  ('ربح مضمون','fraud'),('تسويق هرمي','fraud'),('ماركه مقلده','fraud'),('guaranteed profit','fraud'),('pyramid scheme','fraud')
+on conflict (term) do nothing;
+
+-- Which banned categories does a text hit? Whole words, with the common Arabic prefixes (ال، و، ب، ل، ف…).
+create or replace function public.halal_violations(t text)
+returns text[] language sql stable security definer set search_path = public as $$
+  with n as (select public.halal_normalize(t) as s)
+  select coalesce(array_agg(distinct h.category order by h.category), '{}')
+  from public.halal_terms h, n
+  where exists (select 1 from unnest(array['', 'ال', 'و', 'وال', 'ب', 'بال', 'وب', 'وبال', 'ل', 'لل', 'ول', 'ولل', 'ف', 'فال', 'فب', 'فبال', 'كال']) p
+                where n.s like '% ' || p || h.norm || ' %');
+$$;
+
+create or replace function public.assert_halal()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v text[];
+begin
+  v := public.halal_violations(concat_ws(' ', new.name, new.brand, new.description));
+  if array_length(v, 1) > 0 then raise exception 'halal_blocked:%', array_to_string(v, ','); end if;
+  return new;
+end $$;
+drop trigger if exists products_halal on public.products;
+create trigger products_halal before insert or update of name, brand, description on public.products
+  for each row execute function public.assert_halal();
+
+create table if not exists public.blocked_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  reason text not null default '' check (char_length(reason) <= 300),
+  blocked_at timestamptz not null default now(),
+  blocked_by uuid
+);
+alter table public.blocked_users enable row level security;
+drop policy if exists "blocked own or staff read" on public.blocked_users;
+create policy "blocked own or staff read" on public.blocked_users for select using (user_id = auth.uid() or public.has_role(array['manager']));
+
+-- A suspended account never counts as subscribed, whatever its plan says.
+create or replace function public.subscription_active()
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null
+    and not exists (select 1 from public.blocked_users b where b.user_id = auth.uid())
+    and exists (
+      select 1 from public.subscriptions s
+      where s.user_id = auth.uid()
+        and ((s.status in ('on_trial', 'active') and (s.current_period_end is null or s.current_period_end > now()))
+          or (s.status in ('past_due', 'cancelled') and s.current_period_end > now())));
+$$;
+
+create or replace function public.my_subscription()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case
+    when b.user_id is not null then jsonb_build_object('blocked', true, 'reason', b.reason, 'active', false,
+      'plan', s.plan, 'status', s.status, 'current_period_end', s.current_period_end)
+    when s.user_id is not null then jsonb_build_object('plan', s.plan, 'status', s.status, 'current_period_end', s.current_period_end,
+      'provider', s.provider, 'manage_url', s.manage_url, 'active', public.subscription_active(), 'blocked', false)
+    else null end
+  from (select auth.uid() as uid) me
+  left join public.subscriptions s on s.user_id = me.uid
+  left join public.blocked_users b on b.user_id = me.uid;
+$$;
+
+create or replace function public.admin_block_member(p_user uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_role(array['manager']) then raise exception 'not_allowed'; end if;
+  if exists (select 1 from public.admins where user_id = p_user) then raise exception 'staff_member'; end if;
+  insert into public.blocked_users (user_id, reason, blocked_by) values (p_user, left(coalesce(p_reason, ''), 300), auth.uid())
+  on conflict (user_id) do update set reason = excluded.reason, blocked_at = now(), blocked_by = excluded.blocked_by;
+end $$;
+
+create or replace function public.admin_unblock_member(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_role(array['manager']) then raise exception 'not_allowed'; end if;
+  delete from public.blocked_users where user_id = p_user;
+end $$;
+
+drop function if exists public.admin_list_subscriptions();
+create function public.admin_list_subscriptions()
+returns table (user_id uuid, email text, full_name text, plan text, status text, current_period_end timestamptz, provider text, active boolean, blocked boolean, block_reason text, updated_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select s.user_id, u.email::text, coalesce(p.full_name, ''), s.plan, s.status, s.current_period_end, s.provider,
+    b.user_id is null and ((s.status in ('on_trial', 'active') and (s.current_period_end is null or s.current_period_end > now()))
+      or (s.status in ('past_due', 'cancelled') and s.current_period_end > now())),
+    b.user_id is not null, coalesce(b.reason, ''), s.updated_at
+  from public.subscriptions s join auth.users u on u.id = s.user_id
+  left join public.profiles p on p.id = s.user_id left join public.blocked_users b on b.user_id = s.user_id
+  where public.has_role(array['manager'])
+  order by s.updated_at desc;
+$$;
+
+revoke execute on function public.halal_violations(text) from public;
+grant execute on function public.halal_violations(text) to anon, authenticated;
+revoke execute on function public.assert_halal() from public, anon, authenticated;
+revoke execute on function public.admin_block_member(uuid, text) from public, anon;
+grant execute on function public.admin_block_member(uuid, text) to authenticated;
+revoke execute on function public.admin_unblock_member(uuid) from public, anon;
+grant execute on function public.admin_unblock_member(uuid) to authenticated;
+revoke execute on function public.admin_list_subscriptions() from public, anon;
+grant execute on function public.admin_list_subscriptions() to authenticated;

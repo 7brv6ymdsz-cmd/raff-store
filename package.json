@@ -8,7 +8,7 @@
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
     "lint:js": "eslint .",
     "lint:css": "stylelint \"*.css\" \"admin/*.css\" \"assets/*.css\"",
-    "lint:html": "html-validate \"*.html\" \"admin/*.html\"",
+    "lint:html": "html-validate \"*.html\" \"admin/*.html\" \"brand/*.html\"",
     "test": "playwright test",
     "test:db": "bash tests/db/run.sh",
     "audit": "node tests/audit/lighthouse.mjs"

@@ -195,6 +195,8 @@
     async listSubs() { return must(await sb.rpc('admin_list_subscriptions')) || []; },
     async grantSub(email, plan, days) { return must(await sb.rpc('admin_grant_subscription', { p_email: email, p_plan: plan, p_days: days })); },
     async endSub(uid) { return must(await sb.rpc('admin_end_subscription', { p_user: uid })); },
+    async blockMember(uid, reason) { return must(await sb.rpc('admin_block_member', { p_user: uid, p_reason: reason })); },
+    async unblockMember(uid) { return must(await sb.rpc('admin_unblock_member', { p_user: uid })); },
     async addStaff(email, role) { must(await sb.rpc('add_staff', { p_email: email, p_role: role })); },
     async removeStaff(uid) { must(await sb.rpc('remove_staff', { p_user: uid })); },
     async movements(pid) { return must(await sb.from('stock_movements').select('*').eq('product_id', pid).order('at', { ascending: false }).limit(50)); },
@@ -1076,6 +1078,8 @@
       const name = f.name.value.trim(), price = +f.price.value;
       const err = $('#edErr');
       if (!name) { err.textContent = 'اكتب اسم المنتج.'; err.hidden = false; f.name.focus(); return; }
+      const haram = window.RaffHalal ? window.RaffHalal.check([name, f.store.value, f.desc.value, f.details ? f.details.value : ''].join(' ')) : [];
+      if (haram.length) { err.textContent = window.RaffHalal.message(haram); err.hidden = false; f.name.focus(); return; }
       if (!(price >= 0) || f.price.value === '') { err.textContent = 'اكتب سعر صحيح.'; err.hidden = false; f.price.focus(); return; }
       const digital = f.ptype.value === 'digital';
       for (const k of ['buyUrl', 'previewUrl']) {
@@ -1709,10 +1713,10 @@
       </section>
       ${rows.length ? `<div class="table-card"><table class="table"><thead><tr><th>المشترك</th><th>الباقة</th><th>الحالة</th><th class="hide-sm">لحد</th><th class="hide-sm">الدفع</th><th></th></tr></thead>
       <tbody>${rows.map((r) => `<tr><td><b>${esc(r.full_name || r.email)}</b><small dir="ltr" style="text-align:right">${esc(r.email)}</small></td><td>${name(r.plan)}</td>
-        <td><span class="badge ${r.active ? 'st-done' : 'st-cancel'}">${SUB_STATUS[r.status] || esc(r.status)}</span></td>
+        <td>${r.blocked ? `<span class="badge st-cancel" title="${esc(r.block_reason || '')}">موقوف لمخالفة</span>` : `<span class="badge ${r.active ? 'st-done' : 'st-cancel'}">${SUB_STATUS[r.status] || esc(r.status)}</span>`}</td>
         <td class="hide-sm">${r.current_period_end ? fmtDate(new Date(r.current_period_end).getTime()) : 'بدون انتهاء'}</td>
         <td class="hide-sm">${r.provider === 'manual' ? 'يدوي' : esc(r.provider)}</td>
-        <td class="num">${r.active ? `<button class="btn danger-ghost" type="button" data-endsub="${esc(r.user_id)}">إنهاء</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+        <td class="num">${r.active ? `<button class="btn danger-ghost" type="button" data-endsub="${esc(r.user_id)}">إنهاء</button>` : ''}${r.blocked ? `<button class="btn" type="button" data-unblock="${esc(r.user_id)}">إلغاء الإيقاف</button>` : `<button class="btn danger-ghost" type="button" data-block="${esc(r.user_id)}">إيقاف لمخالفة</button>`}</td></tr>`).join('')}</tbody></table></div>`
         : `<div class="card">${empty('ما في مشتركين لسا', 'لما حدا يدفع اشتراك، أو تفعّل له اشتراك من هون، بيطلع بهالقائمة.', '')}</div>`}`;
     $('#subForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1722,6 +1726,14 @@
       try { await cloudDo(() => cloudApi.grantSub(email, f.plan.value, days), 'تفعّل الاشتراك'); } catch { return; }
       VIEWS.members();
     });
+    $$('[data-block]').forEach((b) => b.addEventListener('click', () => {
+      const reason = (prompt('سبب الإيقاف (بيشوفه المشترك):', 'مخالفة سياسة الاستخدام الحلال') || '').trim();
+      if (!reason) return;
+      cloudDo(() => cloudApi.blockMember(b.dataset.block, reason), 'انوقف الحساب، وانقفل ميزان عنده').then(() => VIEWS.members(), () => {});
+    }));
+    $$('[data-unblock]').forEach((b) => b.addEventListener('click', () => {
+      cloudDo(() => cloudApi.unblockMember(b.dataset.unblock), 'انلغى الإيقاف').then(() => VIEWS.members(), () => {});
+    }));
     $$('[data-endsub]').forEach((b) => b.addEventListener('click', () => {
       confirmBox('تنهي هالاشتراك؟', 'ميزان رح ينقفل عنده فوراً، وبياناته بتضل محفوظة لو رجع اشترك.', 'إنهاء', async () => {
         try { await cloudDo(() => cloudApi.endSub(b.dataset.endsub), 'انتهى الاشتراك'); } catch { return; }

@@ -48,6 +48,7 @@
     if (m.startsWith('out_of_stock:')) return `الكمية المطلوبة من «${m.split(':')[1]}» مش متوفرة`;
     if (m.startsWith('product_unavailable')) return 'في منتج بالسلة ما عاد متوفر';
     if (m.startsWith('coupon_invalid:')) return m.split(':').slice(1).join(':');
+    if (m.includes('halal_blocked')) { const cats = (m.split('halal_blocked:')[1] || '').split(/[,\s]/).filter(Boolean); return window.RaffHalal ? window.RaffHalal.message(cats) : 'هالمحتوى مخالف لسياسة الاستخدام الحلال.'; }
     const k = Object.keys(ERR).find((x) => m.includes(x));
     return k ? ERR[k] : (m || 'صار خطأ، جرّب مرة تانية');
   };
