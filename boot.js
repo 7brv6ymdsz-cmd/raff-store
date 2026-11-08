@@ -2,4 +2,6 @@
 (function () {
   var h = location.hash;
   if (h.indexOf('#/') === 0 && h.length > 2) document.documentElement.classList.add('route-page');
+  // single-product homepage: remembered from the last visit so the catalog home never flashes first
+  try { if (localStorage.getItem('raff.landing') === '1') document.documentElement.classList.add('landing'); } catch (e) { /* private mode */ }
 })();

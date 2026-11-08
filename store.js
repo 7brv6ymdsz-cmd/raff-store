@@ -53,6 +53,8 @@
   function renderHome() {
     document.title = `${CFG.name || 'رَفّ'} · ${CFG.tagline || ''}`;
     $$('[data-brand], [data-brand-sm]').forEach((el) => { el.firstChild.nodeValue = CFG.name || 'رَفّ'; });
+    const rl = $('.rail-logo');
+    if (rl && rl.firstChild && rl.firstChild.nodeType === 3) { rl.firstChild.nodeValue = (CFG.name || 'ر').trim().charAt(0); rl.setAttribute('aria-label', `${CFG.name || 'رَفّ'}، الرئيسية`); }
     $('#tagline').textContent = CFG.tagline || '';
     $('#bannerTitle').textContent = CFG.banner || '';
     $('#bannerSub').textContent = CFG.bannerSub || '';
@@ -623,7 +625,7 @@
     const skip3d = matchMedia('(prefers-reduced-motion: reduce)').matches || conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '');
     let booted = false;
     const boot = () => {
-      if (booted || skip3d || document.documentElement.classList.contains('route-page') && location.hash.length > 2) return;
+      if (booted || skip3d || document.documentElement.classList.contains('landing') || document.documentElement.classList.contains('route-page') && location.hash.length > 2) return;
       booted = true;
       ['pointerdown', 'pointermove', 'scroll', 'keydown', 'touchstart'].forEach((ev) => removeEventListener(ev, boot));
       load('vendor/three.min.js').then(() => load('store3d.js?v=7')).catch(() => { /* keep flat hero */ });

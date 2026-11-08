@@ -4,7 +4,7 @@ import * as chromeLauncher from 'chrome-launcher';
 import fs from 'node:fs';
 
 const BASE = process.argv[2] || 'http://localhost:8766/raff-store/';
-const PAGES = [['home', ''], ['product', '#/p/14'], ['faq', '#/faq'], ['admin', 'admin/']];
+const PAGES = [['home', ''], ['product', '#/p/8'], ['faq', '#/faq'], ['admin', 'admin/']];
 const chrome = await chromeLauncher.launch({
   chromePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium',
   chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'],

@@ -1,11 +1,11 @@
 {
  "v": 1,
- "updated": "2026-11-03T00:00:00Z",
+ "updated": "2026-11-08T10:30:00Z",
  "settings": {
-  "name": "رَفّ",
-  "tagline": "منتجات رقمية بتحمّلها فوراً",
-  "banner": "أدوات وقوالب جاهزة · تحميل بعد الدفع",
-  "bannerSub": "ملفات PDF وExcel وWord بالعربي",
+  "name": "ميزان",
+  "tagline": "اعرف ربحك الحقيقي",
+  "banner": "",
+  "bannerSub": "",
   "currency": "$",
   "currencyCode": "USD",
   "shipping": {
@@ -27,9 +27,18 @@
     "holder": "",
     "iban": ""
    }
+  },
+  "landing": {
+   "on": true,
+   "pid": 8
   }
  },
  "categories": [
+  {
+   "id": "tools",
+   "name": "أدوات المشاريع",
+   "c": "#0e7c66"
+  },
   {
    "id": "money",
    "name": "المال والأعمال",
@@ -63,6 +72,32 @@
  ],
  "products": [
   {
+   "id": 8,
+   "type": "digital",
+   "name": "ميزان: اللوحة المالية لمشروعك الصغير",
+   "store": "ميزان",
+   "price": 29,
+   "rating": 0,
+   "reviews": 0,
+   "cat": "tools",
+   "kind": "file",
+   "bg": "#e6f3ef",
+   "fg": "#665a54",
+   "ac": "#332f2d",
+   "desc": "ملف واحد على Excel وGoogle Sheets يجمع دخلك ومصاريفك وفواتيرك وتسعيرك وعملاءك، ويحسب لك صافي الربح والهامش والضريبة تلقائياً. نسخة عربية ونسخة إنجليزية.",
+   "stock": 999,
+   "format": "Excel + PDF",
+   "fileSize": "٧ أوراق · نسختان · دليل بدء",
+   "details": "لوحة تحكم: الدخل والمصاريف وصافي الربح والهامش شهرياً برسوم بيانية\nسجل معاملات بقوائم منسدلة للفئة وطريقة الدفع والعميل\nفاتورة جاهزة للطباعة أو PDF\nحاسبة تسعير تحفظ هامش ربحك\nالعملاء والأهداف الشهرية ومبلغ الضريبة\nنسخة عربية + English، ودليل بدء سريع بالعربي والإنجليزي\nيعمل على Excel وGoogle Sheets وNumbers وLibreOffice",
+   "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/mizan-guide-ar.pdf",
+   "images": [
+    "assets/products/mizan-1.jpg"
+   ],
+   "img": "assets/products/mizan-1.jpg",
+   "featured": true,
+   "hidden": false
+  },
+  {
    "id": 1,
    "type": "digital",
    "name": "دليل الميزانية الشخصية + قالب Excel",
@@ -86,7 +121,7 @@
    ],
    "img": "assets/products/c1-1.jpg",
    "featured": true,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/budget-preview.pdf"
   },
   {
@@ -113,7 +148,7 @@
    ],
    "img": "assets/products/c2-1.jpg",
    "featured": true,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/planner-2027-preview.pdf"
   },
   {
@@ -140,7 +175,7 @@
    ],
    "img": "assets/products/c3-1.jpg",
    "featured": true,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/pricing-guide.pdf"
   },
   {
@@ -167,7 +202,7 @@
    ],
    "img": "assets/products/c4-1.jpg",
    "featured": true,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/content-plan-preview.pdf"
   },
   {
@@ -194,7 +229,7 @@
    ],
    "img": "assets/products/c5-1.jpg",
    "featured": false,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/cv-sample.pdf"
   },
   {
@@ -221,7 +256,7 @@
    ],
    "img": "assets/products/c6-1.jpg",
    "featured": false,
-   "hidden": false,
+   "hidden": true,
    "previewUrl": "https://7brv6ymdsz-cmd.github.io/raff-store/previews/arabic-letters-preview.pdf"
   },
   {
@@ -248,7 +283,7 @@
    ],
    "img": "assets/products/c7-1.jpg",
    "featured": true,
-   "hidden": false,
+   "hidden": true,
    "compare": 39
   }
  ]

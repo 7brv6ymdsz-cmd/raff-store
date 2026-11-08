@@ -1242,6 +1242,11 @@
           </div>
         </section>
         <section class="card set-card">
+          <div class="set-head"><span class="set-ic">${ic('star')}</span><div><h2>واجهة منتج واحد</h2><p class="muted">الصفحة الرئيسية بتصير صفحة احترافية لمنتج واحد (عربي وإنجليزي) بدل شبكة المنتجات. باقي الصفحات والسلة والدفع بيضلّوا متل ما هنّي.</p></div></div>
+          ${toggle('landingOn', !!(s.landing && s.landing.on), 'فعّل واجهة المنتج الواحد')}
+          ${field('المنتج', `<select name="landingPid">${state.products.filter((x) => !x.hidden || (s.landing && +s.landing.pid === +x.id)).map((x) => `<option value="${x.id}" ${s.landing && +s.landing.pid === +x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`, 'لازم يكون المنتج ظاهر بالمتجر')}
+        </section>
+        <section class="card set-card">
           <div class="set-head"><span class="set-ic">${ic('whatsapp')}</span><div><h2>التواصل والسوشال</h2><p class="muted">بيطلعوا بصفحة «تواصل معنا» وبأسفل المتجر. اتركه فاضي لتخفيه.</p></div></div>
           <div class="three">
             ${field('الإيميل', `<input name="cEmail" type="email" dir="ltr" value="${esc(ct.email)}" maxlength="120">`)}
@@ -1335,6 +1340,8 @@
       collectCats();
       if (state.categories.some((c) => !c.name)) { toast('في تصنيف بلا اسم'); return; }
       if (!f.name.value.trim()) { toast('اكتب اسم المتجر'); f.name.focus(); return; }
+      const lp = state.products.find((x) => +x.id === +f.landingPid.value);
+      if (f.landingOn.checked && (!lp || lp.hidden)) { toast('اختار منتج ظاهر لواجهة المنتج الواحد'); f.landingPid.focus(); return; }
       const url = (v) => { v = v.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : ''; };
       const badUrl = ['cInstagram', 'cTiktok', 'cFacebook'].find((k) => f[k].value.trim() && !url(f[k].value));
       if (badUrl) { toast('روابط السوشال لازم تبلّش بـ https://'); f[badUrl].focus(); return; }
@@ -1343,6 +1350,7 @@
         name: f.name.value.trim(), tagline: f.tagline.value.trim(), banner: f.banner.value.trim(), bannerSub: f.bannerSub.value.trim(),
         contact: { email: f.cEmail.value.trim(), phone: S.toLatinDigits(f.cPhone.value).replace(/[^\d+ ]/g, '').trim(), address: f.cAddress.value.trim(), instagram: url(f.cInstagram.value), tiktok: url(f.cTiktok.value), facebook: url(f.cFacebook.value) },
         pages: { about: f.pAbout.value.trim(), shipping: f.pShipping.value.trim(), returns: f.pReturns.value.trim(), faq: f.pFaq.value.trim() },
+        landing: { on: !!f.landingOn.checked && !!f.landingPid.value, pid: +f.landingPid.value || 0 },
       });
       if (CLOUD) {
         const removed = catsBefore.filter((id) => !state.categories.some((c) => c.id === id));
