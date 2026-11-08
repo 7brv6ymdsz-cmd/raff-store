@@ -15,7 +15,7 @@ export default [
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { crypto: 'readonly', TextEncoder: 'readonly' } },
   },
   {
-    files: ['tests/**/*.{js,mjs}', 'eslint.config.js', 'playwright.config.js'],
+    files: ['tests/**/*.{js,mjs}', 'tools/**/*.{js,mjs}', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node, ...globals.browser } },
     rules: { 'no-unused-vars': ['error', { args: 'none', ignoreRestSiblings: true, caughtErrors: 'none' }] },
   },
