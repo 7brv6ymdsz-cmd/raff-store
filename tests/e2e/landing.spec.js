@@ -119,3 +119,22 @@ for (const l of ['en', 'ar']) {
     expect(serious.map((v) => `${v.id}: ${v.nodes.length} × ${v.nodes[0].target.join(' ')}`)).toEqual([]);
   });
 }
+
+test('a first-time visitor never sees the catalog home flash before the product page', async ({ page }) => {
+  await serve(page);
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      window.heroAtStart = getComputedStyle(document.querySelector('.hero')).display;
+    });
+  });
+  await page.goto('');
+  await expect(page.locator('#landing .l-hero h1')).toBeVisible();
+  expect(await page.evaluate(() => window.heroAtStart)).toBe('none');
+});
+
+test('if the catalog cannot load, the visitor sees an explanation, not a blank page', async ({ page }) => {
+  await page.route('**/data/store.json*', (route) => route.fulfill({ status: 500, body: 'down' }));
+  await page.goto('');
+  await expect(page.locator('#sections')).toContainText('ما قدرنا نحمّل المنتجات');
+  await expect(page.locator('html')).not.toHaveClass(/landing/);
+});

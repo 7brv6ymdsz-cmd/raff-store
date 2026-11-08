@@ -635,6 +635,7 @@
     addEventListener('load', () => setTimeout(() => idle(boot, { timeout: 3000 }), 3500), { once: true });
     if (window.raffRouter) addEventListener('hashchange', () => { if (!location.hash.startsWith('#/') || location.hash === '#/') boot(); });
   }).catch((e) => {
+    document.documentElement.classList.remove('landing'); // show the error on the normal home, never a blank page
     $('#sections').innerHTML = `<p class="empty" style="text-align:center">ما قدرنا نحمّل المنتجات. حدّث الصفحة بعد شوي.<br><small>${esc(D.friendly(e))}</small></p>`;
   });
 })();
