@@ -79,7 +79,7 @@
       return;
     }
     if (r.name !== 'p') setMeta(defaultDesc, null);
-    const fn = ROUTES[r.name];
+    const fn = ROUTES[r.name] || (window.raffExtraRoutes || {})[r.name]; // other files (mizan-app.js) register here
     if (!fn) { location.hash = '#/'; return; }
     if (lastName !== r.name || r.name === 'p') scrollTo(0, 0);
     lastName = r.name;
@@ -87,7 +87,7 @@
     page.focus({ preventScroll: true });
   }
   const navFor = (n) => ({ wishlist: 'wishlist', account: 'account', orders: 'account', addresses: 'account', messages: 'account', login: 'account', signup: 'account' }[n] || '');
-  window.raffRouter = { route };
+  window.raffRouter = { route, routes: ROUTES };
   addEventListener('hashchange', route);
 
   /* ---------- Header account state ---------- */
@@ -337,7 +337,7 @@
   });
   const busy = (form, on) => { const b = form.querySelector('[type=submit]'); b.disabled = on; b.classList.toggle('busy', on); };
   const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-  const afterLogin = (q) => { const next = q && q.get('next'); location.hash = next === 'checkout' ? '#/' : '#/account'; if (next === 'checkout') setTimeout(() => { R().openCart(); }, 100); };
+  const afterLogin = (q) => { const next = q && q.get('next'); location.hash = next === 'checkout' ? '#/' : next === 'mizan' ? '#/mizan' : '#/account'; if (next === 'checkout') setTimeout(() => { R().openCart(); }, 100); };
 
   ROUTES.login = async ({ q }) => {
     if (!cloud) { page.innerHTML = noCloud(); return; }
@@ -507,6 +507,7 @@
         <a href="#/orders"><b>${num(active.length)}</b><span>قيد التوصيل</span></a>
         <a href="#/wishlist"><b>${num(D.wishlist.all().length)}</b><span>بالمفضلة</span></a>
       </div>
+      <div id="accSub"></div>
       ${active[0] ? `<a class="acc-track" href="#/orders/${encodeURIComponent(active[0].id)}"><div><small>آخر طلب</small><b class="oid">${esc(active[0].id)}</b><span>${STATUS[active[0].status]}</span></div>${progress(active[0].status)}<em>${money(active[0].total)}</em></a>` : ''}
       <div class="acc-cards">
         <form class="pg-card" id="profForm" novalidate>
@@ -530,6 +531,7 @@
         <label class="field"><span>للتأكيد اكتب «احذف»</span><input id="delConfirm" autocomplete="off"></label>
         <button class="btn-danger" type="button" id="delBtn" disabled>حذف حسابي نهائياً</button>
       </details>`);
+    if (window.raffMizan) window.raffMizan.accountCard($('#accSub'));
     const pf = $('#profForm');
     pf.addEventListener('submit', async (e) => {
       e.preventDefault();

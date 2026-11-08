@@ -800,3 +800,172 @@ drop policy if exists "product images admin update" on storage.objects;
 create policy "product images admin update" on storage.objects for update using (bucket_id = 'products' and public.has_role(array['manager', 'inventory']));
 drop policy if exists "product images admin delete" on storage.objects;
 create policy "product images admin delete" on storage.objects for delete using (bucket_id = 'products' and public.has_role(array['manager', 'inventory']));
+
+-- =====================================================================
+-- Subscriptions (monthly plans) and Mizan, the finance book that only opens with an active subscription.
+-- The lock lives here, in row-level security: a browser cannot read or write Mizan data without it.
+-- =====================================================================
+create table if not exists public.subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'pro',
+  status text not null default 'active',
+  current_period_end timestamptz,
+  provider text not null default 'manual',
+  provider_subscription_id text,
+  provider_customer_id text,
+  manage_url text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.subscriptions drop constraint if exists subscriptions_plan_check;
+alter table public.subscriptions add constraint subscriptions_plan_check check (plan in ('pro', 'business'));
+alter table public.subscriptions drop constraint if exists subscriptions_status_check;
+alter table public.subscriptions add constraint subscriptions_status_check check (status in ('on_trial', 'active', 'paused', 'past_due', 'unpaid', 'cancelled', 'expired'));
+alter table public.subscriptions drop constraint if exists subscriptions_provider_check;
+alter table public.subscriptions add constraint subscriptions_provider_check check (provider in ('manual', 'lemonsqueezy', 'paddle'));
+create unique index if not exists subscriptions_provider_sub_idx on public.subscriptions (provider, provider_subscription_id) where provider_subscription_id is not null;
+alter table public.subscriptions enable row level security;
+drop policy if exists "subscriptions own read" on public.subscriptions;
+create policy "subscriptions own read" on public.subscriptions for select using (user_id = auth.uid() or public.has_role(array['manager']));
+-- No insert/update/delete policy on purpose: only the functions below and the payment webhook (service role) write here.
+
+-- Open while paid or on trial; a cancelled or past-due plan stays open until the end of the period already paid for.
+create or replace function public.subscription_active()
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.subscriptions s
+    where s.user_id = auth.uid()
+      and ((s.status in ('on_trial', 'active') and (s.current_period_end is null or s.current_period_end > now()))
+        or (s.status in ('past_due', 'cancelled') and s.current_period_end > now())));
+$$;
+
+create or replace function public.my_subscription()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('plan', s.plan, 'status', s.status, 'current_period_end', s.current_period_end,
+    'provider', s.provider, 'manage_url', s.manage_url, 'active', public.subscription_active())
+  from public.subscriptions s where s.user_id = auth.uid();
+$$;
+
+-- Owner/manager: give or extend a plan by email (manual payment, a gift, a test). p_days null = no end date.
+create or replace function public.admin_grant_subscription(p_email text, p_plan text, p_days int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid; s public.subscriptions;
+begin
+  if not public.has_role(array['manager']) then raise exception 'not_allowed'; end if;
+  if p_plan is null or p_plan not in ('pro', 'business') then raise exception 'bad_plan'; end if;
+  if p_days is not null and (p_days < 1 or p_days > 3660) then raise exception 'bad_days'; end if;
+  select id into uid from auth.users where lower(email) = lower(trim(coalesce(p_email, '')));
+  if uid is null then raise exception 'user_not_found'; end if;
+  insert into public.subscriptions (user_id, plan, status, current_period_end, provider, updated_at)
+  values (uid, p_plan, 'active', case when p_days is null then null else now() + make_interval(days => p_days) end, 'manual', now())
+  on conflict (user_id) do update set plan = excluded.plan, status = 'active', current_period_end = excluded.current_period_end,
+    provider = 'manual', provider_subscription_id = null, provider_customer_id = null, manage_url = '', updated_at = now()
+  returning * into s;
+  return to_jsonb(s);
+end $$;
+
+create or replace function public.admin_end_subscription(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_role(array['manager']) then raise exception 'not_allowed'; end if;
+  update public.subscriptions set status = 'expired', current_period_end = now(), updated_at = now() where user_id = p_user;
+  if not found then raise exception 'not_found'; end if;
+end $$;
+
+create or replace function public.admin_list_subscriptions()
+returns table (user_id uuid, email text, full_name text, plan text, status text, current_period_end timestamptz, provider text, active boolean, updated_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select s.user_id, u.email::text, coalesce(p.full_name, ''), s.plan, s.status, s.current_period_end, s.provider,
+    ((s.status in ('on_trial', 'active') and (s.current_period_end is null or s.current_period_end > now()))
+      or (s.status in ('past_due', 'cancelled') and s.current_period_end > now())),
+    s.updated_at
+  from public.subscriptions s join auth.users u on u.id = s.user_id left join public.profiles p on p.id = s.user_id
+  where public.has_role(array['manager'])
+  order by s.updated_at desc;
+$$;
+
+-- Called only by the payment webhook (service role). Finds the member by the id passed at checkout, else by email.
+create or replace function public.billing_upsert(p_user uuid, p_email text, p_plan text, p_status text, p_period_end timestamptz,
+  p_provider text, p_sub_id text, p_customer_id text, p_manage_url text)
+returns text language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  if p_provider not in ('lemonsqueezy', 'paddle') then raise exception 'bad_provider'; end if;
+  if p_status not in ('on_trial', 'active', 'paused', 'past_due', 'unpaid', 'cancelled', 'expired') then raise exception 'bad_status'; end if;
+  select id into uid from auth.users where id = p_user;
+  if uid is null and p_sub_id is not null then
+    select s.user_id into uid from public.subscriptions s where s.provider = p_provider and s.provider_subscription_id = p_sub_id;
+  end if;
+  if uid is null and coalesce(p_email, '') <> '' then
+    select id into uid from auth.users where lower(email) = lower(trim(p_email));
+  end if;
+  if uid is null then return 'no_user'; end if;
+  insert into public.subscriptions (user_id, plan, status, current_period_end, provider, provider_subscription_id, provider_customer_id, manage_url, updated_at)
+  values (uid, coalesce(nullif(p_plan, ''), 'pro'), p_status, p_period_end, p_provider, p_sub_id, p_customer_id, coalesce(p_manage_url, ''), now())
+  on conflict (user_id) do update set plan = excluded.plan, status = excluded.status, current_period_end = excluded.current_period_end,
+    provider = excluded.provider, provider_subscription_id = excluded.provider_subscription_id,
+    provider_customer_id = excluded.provider_customer_id, manage_url = excluded.manage_url, updated_at = now();
+  return 'ok';
+end $$;
+
+create table if not exists public.mizan_books (
+  user_id uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  settings jsonb not null default '{}'::jsonb check (jsonb_typeof(settings) = 'object' and pg_column_size(settings) < 20000),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.mizan_entries (
+  id bigint generated by default as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  day date not null default current_date,
+  kind text not null check (kind in ('income', 'expense')),
+  category text not null default '' check (char_length(category) <= 60),
+  description text not null default '' check (char_length(description) <= 200),
+  party text not null default '' check (char_length(party) <= 120),
+  amount numeric(14, 2) not null check (amount >= 0 and amount < 1000000000000),
+  method text not null default '' check (char_length(method) <= 40),
+  created_at timestamptz not null default now()
+);
+create index if not exists mizan_entries_user_day_idx on public.mizan_entries (user_id, day);
+create table if not exists public.mizan_clients (
+  id bigint generated by default as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 120),
+  email text not null default '' check (char_length(email) <= 160),
+  phone text not null default '' check (char_length(phone) <= 40),
+  city text not null default '' check (char_length(city) <= 80),
+  created_at timestamptz not null default now()
+);
+create index if not exists mizan_clients_user_idx on public.mizan_clients (user_id);
+create table if not exists public.mizan_invoices (
+  id bigint generated by default as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  number text not null check (char_length(number) between 1 and 40),
+  client text not null default '' check (char_length(client) <= 120),
+  issued date not null default current_date,
+  due date,
+  items jsonb not null default '[]'::jsonb check (jsonb_typeof(items) = 'array' and jsonb_array_length(items) <= 50),
+  tax_rate numeric(6, 4) not null default 0 check (tax_rate >= 0 and tax_rate <= 1),
+  note text not null default '' check (char_length(note) <= 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists mizan_invoices_user_idx on public.mizan_invoices (user_id);
+do $$ declare t text; begin
+  foreach t in array array['mizan_books', 'mizan_entries', 'mizan_clients', 'mizan_invoices'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "mizan own with subscription" on public.%I', t);
+    execute format('create policy "mizan own with subscription" on public.%I for all using (user_id = auth.uid() and public.subscription_active()) with check (user_id = auth.uid() and public.subscription_active())', t);
+  end loop;
+end $$;
+
+revoke execute on function public.subscription_active() from public;
+grant execute on function public.subscription_active() to anon, authenticated; -- false for visitors; used by the row policies
+revoke execute on function public.my_subscription() from public, anon;
+grant execute on function public.my_subscription() to authenticated;
+revoke execute on function public.admin_grant_subscription(text, text, int) from public, anon;
+grant execute on function public.admin_grant_subscription(text, text, int) to authenticated;
+revoke execute on function public.admin_end_subscription(uuid) from public, anon;
+grant execute on function public.admin_end_subscription(uuid) to authenticated;
+revoke execute on function public.admin_list_subscriptions() from public, anon;
+grant execute on function public.admin_list_subscriptions() to authenticated;
+revoke execute on function public.billing_upsert(uuid, text, text, text, timestamptz, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.billing_upsert(uuid, text, text, text, timestamptz, text, text, text, text) to service_role;

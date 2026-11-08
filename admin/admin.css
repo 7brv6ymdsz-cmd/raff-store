@@ -660,3 +660,5 @@ button.kpi { text-align: start; cursor: pointer; }
 .digi-ed legend .ic { width: 16px; height: 16px; }
 .digi-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: #ece6ff; color: #4b2bbf; margin-inline-start: 6px; vertical-align: middle; }
 .dl-block h3 { display: flex; align-items: center; gap: 6px; } .dl-block h3 .ic { width: 16px; height: 16px; }
+.plan-ed { border: 1px dashed var(--line, #dcd6d0); border-radius: 14px; padding: 12px 14px 2px; margin: 0 0 12px; }
+.plan-ed textarea { min-height: 72px; }

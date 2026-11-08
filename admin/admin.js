@@ -39,6 +39,7 @@
     questions: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>',
     send: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
     inventory: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10M7.5 5l9 4"/>',
+    members: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16a3.4 3.4 0 0 1 6.4 0M14 10h4M14 13.5h3"/>',
     team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11l1.5 1.5L21 10"/>',
     activity: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
     bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
@@ -191,6 +192,9 @@
       return must(await sb.from('conversations').select('id,user_id,name,contact,subject,order_id,product_id,status,unread_admin,last_message,created_at,updated_at').gt('updated_at', new Date(since).toISOString()).order('updated_at', { ascending: false }));
     },
     async listStaff() { return must(await sb.rpc('list_staff')); },
+    async listSubs() { return must(await sb.rpc('admin_list_subscriptions')) || []; },
+    async grantSub(email, plan, days) { return must(await sb.rpc('admin_grant_subscription', { p_email: email, p_plan: plan, p_days: days })); },
+    async endSub(uid) { return must(await sb.rpc('admin_end_subscription', { p_user: uid })); },
     async addStaff(email, role) { must(await sb.rpc('add_staff', { p_email: email, p_role: role })); },
     async removeStaff(uid) { must(await sb.rpc('remove_staff', { p_user: uid })); },
     async movements(pid) { return must(await sb.from('stock_movements').select('*').eq('product_id', pid).order('at', { ascending: false }).limit(50)); },
@@ -414,6 +418,7 @@
     { id: 'products', t: 'المنتجات', k: 'الكتالوج' },
     { id: 'inventory', t: 'المخزون', k: 'الكتالوج' },
     { id: 'customers', t: 'العملاء', k: 'المبيعات' },
+    { id: 'members', t: 'المشتركون', k: 'الاشتراكات' },
     { id: 'messages', t: 'الرسائل', k: 'خدمة العملاء' },
     { id: 'questions', t: 'أسئلة المنتجات', k: 'خدمة العملاء' },
     { id: 'payments', t: 'الدفع والشحن', k: 'الإعدادات' },
@@ -428,7 +433,7 @@
   // what each staff role may open (the database enforces the same rules)
   const ROLE_PAGES = {
     owner: null,
-    manager: ['dashboard', 'orders', 'products', 'inventory', 'customers', 'messages', 'questions', 'payments', 'coupons', 'reviews', 'settings', 'activity', 'server'],
+    manager: ['dashboard', 'orders', 'products', 'inventory', 'customers', 'members', 'messages', 'questions', 'payments', 'coupons', 'reviews', 'settings', 'activity', 'server'],
     inventory: ['dashboard', 'products', 'inventory'],
     support: ['dashboard', 'orders', 'customers', 'messages', 'questions', 'reviews'],
   };
@@ -1247,6 +1252,12 @@
           ${field('المنتج', `<select name="landingPid">${state.products.filter((x) => !x.hidden || (s.landing && +s.landing.pid === +x.id)).map((x) => `<option value="${x.id}" ${s.landing && +s.landing.pid === +x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`, 'لازم يكون المنتج ظاهر بالمتجر')}
         </section>
         <section class="card set-card">
+          <div class="set-head"><span class="set-ic">${ic('members')}</span><div><h2>باقات الاشتراك الشهري</h2><p class="muted">الأسعار وروابط صفحة الدفع (من Lemon Squeezy). ميزان بيفتح للمشترك لما يكون اشتراكه فعّال.</p></div></div>
+          ${[0, 1].map((i) => { const bp = billingPlans()[i] || { id: i ? 'business' : 'pro', name: i ? 'أعمال' : 'احترافي', price: i ? 249 : 119 }; return `<div class="plan-ed">
+            <div class="three">${field(i ? 'الباقة الثانية' : 'الباقة الأولى', `<input name="bName${i}" maxlength="30" value="${esc(bp.name || '')}">`)}${field('السعر الشهري ($)', `<input name="bPrice${i}" type="number" min="1" step="1" dir="ltr" value="${esc(String(bp.price || ''))}">`)}${field('رابط صفحة الدفع', `<input name="bUrl${i}" type="url" dir="ltr" placeholder="https://…lemonsqueezy.com/checkout/buy/…" value="${esc(bp.checkoutUrl || '')}">`)}</div>
+            ${field('المزايا (سطر لكل ميزة)', `<textarea name="bFeat${i}" rows="3" maxlength="600">${esc((bp.features || []).join('\n'))}</textarea>`)}</div>`; }).join('')}
+        </section>
+        <section class="card set-card">
           <div class="set-head"><span class="set-ic">${ic('whatsapp')}</span><div><h2>التواصل والسوشال</h2><p class="muted">بيطلعوا بصفحة «تواصل معنا» وبأسفل المتجر. اتركه فاضي لتخفيه.</p></div></div>
           <div class="three">
             ${field('الإيميل', `<input name="cEmail" type="email" dir="ltr" value="${esc(ct.email)}" maxlength="120">`)}
@@ -1340,9 +1351,13 @@
       collectCats();
       if (state.categories.some((c) => !c.name)) { toast('في تصنيف بلا اسم'); return; }
       if (!f.name.value.trim()) { toast('اكتب اسم المتجر'); f.name.focus(); return; }
+      const url = (v) => { v = v.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : ''; };
+      const plansIn = [0, 1].map((i) => ({ id: i ? 'business' : 'pro', name: f[`bName${i}`].value.trim() || (i ? 'أعمال' : 'احترافي'), price: Math.max(1, Math.round(+f[`bPrice${i}`].value || 0)) || (i ? 249 : 119),
+        checkoutUrl: f[`bUrl${i}`].value.trim(), features: f[`bFeat${i}`].value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 8) }));
+      const badPlanUrl = plansIn.findIndex((pl) => pl.checkoutUrl && !url(pl.checkoutUrl));
+      if (badPlanUrl >= 0) { toast('رابط صفحة الدفع لازم يبلّش بـ https://'); f[`bUrl${badPlanUrl}`].focus(); return; }
       const lp = state.products.find((x) => +x.id === +f.landingPid.value);
       if (f.landingOn.checked && (!lp || lp.hidden)) { toast('اختار منتج ظاهر لواجهة المنتج الواحد'); f.landingPid.focus(); return; }
-      const url = (v) => { v = v.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : ''; };
       const badUrl = ['cInstagram', 'cTiktok', 'cFacebook'].find((k) => f[k].value.trim() && !url(f[k].value));
       if (badUrl) { toast('روابط السوشال لازم تبلّش بـ https://'); f[badUrl].focus(); return; }
       if (f.cEmail.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.cEmail.value.trim())) { toast('الإيميل مش صحيح'); f.cEmail.focus(); return; }
@@ -1350,7 +1365,8 @@
         name: f.name.value.trim(), tagline: f.tagline.value.trim(), banner: f.banner.value.trim(), bannerSub: f.bannerSub.value.trim(),
         contact: { email: f.cEmail.value.trim(), phone: S.toLatinDigits(f.cPhone.value).replace(/[^\d+ ]/g, '').trim(), address: f.cAddress.value.trim(), instagram: url(f.cInstagram.value), tiktok: url(f.cTiktok.value), facebook: url(f.cFacebook.value) },
         pages: { about: f.pAbout.value.trim(), shipping: f.pShipping.value.trim(), returns: f.pReturns.value.trim(), faq: f.pFaq.value.trim() },
-        landing: { on: !!f.landingOn.checked && !!f.landingPid.value, pid: +f.landingPid.value || 0 },
+        landing: { ...(s.landing || {}), on: !!f.landingOn.checked && !!f.landingPid.value, pid: +f.landingPid.value || 0 },
+        billing: { plans: plansIn.map((pl) => ({ ...pl, checkoutUrl: url(pl.checkoutUrl) })) },
       });
       if (CLOUD) {
         const removed = catsBefore.filter((id) => !state.categories.some((c) => c.id === id));
@@ -1656,6 +1672,61 @@
     });
     $$('.role-sel').forEach((sel) => sel.addEventListener('change', async () => {
       try { await cloudDo(() => cloudApi.addStaff(sel.dataset.staff, sel.value), 'تغيّر الدور'); } catch { VIEWS.team(); }
+    }));
+  };
+
+  /* ---------- Members (monthly subscriptions that open Mizan) ---------- */
+  const SUB_STATUS = { on_trial: 'تجربة', active: 'فعّال', past_due: 'بانتظار الدفع', cancelled: 'ملغى', paused: 'موقوف', unpaid: 'غير مدفوع', expired: 'منتهي' };
+  const billingPlans = () => {
+    const b = state.settings.billing || {};
+    return Array.isArray(b.plans) && b.plans.length ? b.plans : [{ id: 'pro', name: 'احترافي', price: 119 }, { id: 'business', name: 'أعمال', price: 249 }];
+  };
+  VIEWS.members = async () => {
+    if (!CLOUD) {
+      $('#view').innerHTML = `<section class="card set-card"><div class="set-head"><span class="set-ic">${ic('members')}</span><div><h2>الاشتراكات بتشتغل مع السيرفر</h2>
+        <p class="muted">حسابات المشتركين وقفل «ميزان» محفوظين بقاعدة البيانات، فبيشتغلوا بعد ربط السيرفر. الأسعار وروابط الدفع فيك تجهّزها من الإعدادات من هلّق.</p></div></div>
+        <div class="row-btns"><a class="btn violet" href="#server">ربط السيرفر</a><a class="btn" href="#settings">أسعار الباقات</a></div></section>`;
+      return;
+    }
+    setActions(`<button class="btn" type="button" data-act="nav-members">${ic('refresh')}<span>تحديث</span></button>`);
+    $('#view').innerHTML = '<p class="muted pad">عم نحمّل…</p>';
+    let rows = [];
+    try { rows = await cloudApi.listSubs(); } catch (e) { $('#view').innerHTML = `<p class="err pad">${esc(D.friendly(e))}</p>`; return; }
+    const plans = billingPlans(), price = (id) => +((plans.find((p) => p.id === id) || {}).price || 0);
+    const live = rows.filter((r) => r.active), mrr = live.filter((r) => r.provider !== 'manual').reduce((t, r) => t + price(r.plan), 0);
+    const name = (id) => esc((plans.find((p) => p.id === id) || {}).name || id);
+    $('#view').innerHTML = `
+      <div class="kpis">
+        <div class="kpi"><span>مشتركين فعّالين</span><b>${num(live.length)}</b><small>من ${num(rows.length)}</small></div>
+        <div class="kpi"><span>الدخل الشهري المتكرر (تقديري)</span><b>${money(mrr)}</b><small>الاشتراكات المدفوعة فقط</small></div>
+      </div>
+      <section class="card set-card">
+        <div class="set-head"><span class="set-ic">${ic('members')}</span><div><h2>أعطِ اشتراك يدوياً</h2><p class="muted">لدفعة يدوية أو هدية أو تجربة. لازم الشخص يكون عامل حساب بالموقع.</p></div></div>
+        <form class="pin-form" id="subForm" novalidate>
+          <div class="three">${field('الإيميل', '<input name="email" type="email" dir="ltr" required>')}${field('الباقة', `<select name="plan">${plans.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>`)}${field('المدة بالأيام', '<input name="days" type="number" min="1" max="3660" value="30" dir="ltr">', 'فاضي = بدون انتهاء')}</div>
+          <button class="btn violet" type="submit">${ic('plus')}تفعيل</button>
+        </form>
+      </section>
+      ${rows.length ? `<div class="table-card"><table class="table"><thead><tr><th>المشترك</th><th>الباقة</th><th>الحالة</th><th class="hide-sm">لحد</th><th class="hide-sm">الدفع</th><th></th></tr></thead>
+      <tbody>${rows.map((r) => `<tr><td><b>${esc(r.full_name || r.email)}</b><small dir="ltr" style="text-align:right">${esc(r.email)}</small></td><td>${name(r.plan)}</td>
+        <td><span class="badge ${r.active ? 'st-done' : 'st-cancel'}">${SUB_STATUS[r.status] || esc(r.status)}</span></td>
+        <td class="hide-sm">${r.current_period_end ? fmtDate(new Date(r.current_period_end).getTime()) : 'بدون انتهاء'}</td>
+        <td class="hide-sm">${r.provider === 'manual' ? 'يدوي' : esc(r.provider)}</td>
+        <td class="num">${r.active ? `<button class="btn danger-ghost" type="button" data-endsub="${esc(r.user_id)}">إنهاء</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+        : `<div class="card">${empty('ما في مشتركين لسا', 'لما حدا يدفع اشتراك، أو تفعّل له اشتراك من هون، بيطلع بهالقائمة.', '')}</div>`}`;
+    $('#subForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target, email = f.email.value.trim(), days = f.days.value === '' ? null : Math.floor(+f.days.value);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('الإيميل مش صحيح'); return; }
+      if (days !== null && !(days >= 1 && days <= 3660)) { toast('المدة من ١ لـ ٣٦٦٠ يوم'); return; }
+      try { await cloudDo(() => cloudApi.grantSub(email, f.plan.value, days), 'تفعّل الاشتراك'); } catch { return; }
+      VIEWS.members();
+    });
+    $$('[data-endsub]').forEach((b) => b.addEventListener('click', () => {
+      confirmBox('تنهي هالاشتراك؟', 'ميزان رح ينقفل عنده فوراً، وبياناته بتضل محفوظة لو رجع اشترك.', 'إنهاء', async () => {
+        try { await cloudDo(() => cloudApi.endSub(b.dataset.endsub), 'انتهى الاشتراك'); } catch { return; }
+        VIEWS.members();
+      });
     }));
   };
 
@@ -1979,6 +2050,7 @@
       }
       case 'bell': openBell(); break;
       case 'nav-activity': VIEWS.activity(); break;
+      case 'nav-members': VIEWS.members(); break;
       case 'delete-conv': {
         const id = $('#sheetInner').dataset.sheetConv;
         confirmBox('تحذف المحادثة؟', 'رح تنحذف المحادثة وكل رسائلها نهائياً.', 'حذف', async () => {

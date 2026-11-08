@@ -11,6 +11,10 @@ export default [
     rules: { 'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }], 'no-empty': ['error', { allowEmptyCatch: true }] },
   },
   {
+    files: ['supabase/functions/**/*.js'],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { crypto: 'readonly', TextEncoder: 'readonly' } },
+  },
+  {
     files: ['tests/**/*.{js,mjs}', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node, ...globals.browser } },
     rules: { 'no-unused-vars': ['error', { args: 'none', ignoreRestSiblings: true, caughtErrors: 'none' }] },

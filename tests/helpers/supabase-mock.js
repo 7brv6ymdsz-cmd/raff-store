@@ -20,6 +20,7 @@ export function makeMock() {
     categories: cat.categories.map((c, i) => ({ id: c.id, name: c.name, color: c.c, sort: i })),
     products: cat.products.map((p) => ({ id: p.id, name: p.name, brand: p.store, category_id: p.cat, price: p.price, compare_at: null, stock: p.stock, description: p.desc, images: [], art: { kind: p.kind, bg: p.bg, fg: p.fg, ac: p.ac }, options: p.options || [], featured: p.featured, hidden: false, rating: p.rating, reviews_count: p.reviews, sort: 0, created_at: new Date().toISOString() })),
     admins: [], profiles: [], addresses: [], wishlist: [], orders: [], reviews: [], conversations: [], conversation_messages: [], product_questions: [], stock_movements: [], admin_notifications: [], audit_log: [],
+    subscriptions: [], mizan_books: [], mizan_entries: [], mizan_clients: [], mizan_invoices: [],
     coupons: [{ code: 'WELCOME10', kind: 'percent', value: 10, min_subtotal: 0, starts_at: null, ends_at: null, max_uses: null, uses: 0, active: true, created_at: new Date().toISOString() }],
   };
   db.settings[0].data.payments = { cod: { on: true }, paypal: { on: true, user: 'raffshop' }, bank: { on: false } };
@@ -29,6 +30,11 @@ export function makeMock() {
   const isAdmin = (u) => !!u && db.admins.some((a) => a.user_id === u);
   const roleOf = (u) => (db.admins.find((a) => a.user_id === u) || {}).role;
   const hasRole = (u, ...roles) => !!u && (roleOf(u) === 'owner' || roles.includes(roleOf(u)));
+  // mirrors public.subscription_active() in setup.sql
+  const subOpen = (s) => !!s && ((['on_trial', 'active'].includes(s.status) && (!s.current_period_end || new Date(s.current_period_end) > new Date()))
+    || (['past_due', 'cancelled'].includes(s.status) && !!s.current_period_end && new Date(s.current_period_end) > new Date()));
+  const subActive = (u) => !!u && subOpen(db.subscriptions.find((s) => s.user_id === u));
+  const MIZAN = ['mizan_books', 'mizan_entries', 'mizan_clients', 'mizan_invoices'];
   const setStock = (pr, next, reason, ref = '', note = '', actor = null) => {
     const before = pr.stock; pr.stock = Math.max(0, next);
     if (pr.stock === before) return;
@@ -52,17 +58,21 @@ export function makeMock() {
     if (table === 'conversations') return rows.filter((r) => (u && r.user_id === u) || isAdmin(u));
     if (table === 'conversation_messages') return rows.filter((r) => isAdmin(u) || db.conversations.some((c) => c.id === r.conversation_id && u && c.user_id === u));
     if (table === 'product_questions') return rows.filter((r) => r.status === 'published' || (u && r.user_id === u) || isAdmin(u));
+    if (table === 'subscriptions') return rows.filter((r) => r.user_id === u || hasRole(u, 'manager'));
+    if (MIZAN.includes(table)) return subActive(u) ? rows.filter((r) => r.user_id === u) : [];
     return rows;
   };
   const parseVal = (v) => (v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : /^-?\d+(\.\d+)?$/.test(v) ? +v : v);
   const filt = (rows, params) => {
     for (const [k, v] of params) {
-      if (['select', 'order', 'limit', 'on_conflict', 'columns'].includes(k)) continue;
-      const m = /^(eq|gt|in|neq)\.(.*)$/.exec(v); if (!m) continue;
+      if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(k)) continue;
+      const m = /^(eq|gte|lte|gt|in|neq)\.(.*)$/.exec(v); if (!m) continue;
       const [, op, raw] = m;
       if (op === 'eq') rows = rows.filter((r) => String(r[k]) === String(parseVal(raw)));
       if (op === 'neq') rows = rows.filter((r) => String(r[k]) !== String(parseVal(raw)));
       if (op === 'gt') rows = rows.filter((r) => r[k] > raw);
+      if (op === 'gte') rows = rows.filter((r) => String(r[k]) >= raw);
+      if (op === 'lte') rows = rows.filter((r) => String(r[k]) <= raw);
       if (op === 'in') { const set = raw.replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"|"$/g, '')); rows = rows.filter((r) => set.includes(String(r[k]))); }
     }
     return rows;
@@ -153,6 +163,18 @@ export function makeMock() {
       return null;
     },
     delete_my_account: (b, u) => { if (!u) throw new Error('not_signed_in'); if (isAdmin(u) && db.admins.length === 1) throw new Error('last_admin'); const i = users.findIndex((x) => x.id === u); users.splice(i, 1); db.profiles = db.profiles.filter((x) => x.id !== u); db.addresses = db.addresses.filter((x) => x.user_id !== u); db.wishlist = db.wishlist.filter((x) => x.user_id !== u); db.orders.forEach((o) => { if (o.user_id === u) o.user_id = null; }); return null; },
+    subscription_active: (b, u) => subActive(u),
+    my_subscription: (b, u) => { const s = db.subscriptions.find((x) => x.user_id === u); return s ? { plan: s.plan, status: s.status, current_period_end: s.current_period_end, provider: s.provider, manage_url: s.manage_url || '', active: subActive(u) } : null; },
+    admin_grant_subscription: (b, u) => {
+      if (!hasRole(u, 'manager')) throw new Error('not_allowed');
+      if (!['pro', 'business'].includes(b.p_plan)) throw new Error('bad_plan');
+      const who = users.find((x) => x.email.toLowerCase() === String(b.p_email || '').trim().toLowerCase()); if (!who) throw new Error('user_not_found');
+      const row = { user_id: who.id, plan: b.p_plan, status: 'active', current_period_end: b.p_days == null ? null : new Date(Date.now() + b.p_days * 864e5).toISOString(), provider: 'manual', manage_url: '', updated_at: new Date().toISOString() };
+      const i = db.subscriptions.findIndex((x) => x.user_id === who.id); if (i >= 0) db.subscriptions[i] = { ...db.subscriptions[i], ...row }; else db.subscriptions.push(row);
+      return row;
+    },
+    admin_end_subscription: (b, u) => { if (!hasRole(u, 'manager')) throw new Error('not_allowed'); const x = db.subscriptions.find((y) => y.user_id === b.p_user); if (!x) throw new Error('not_found'); Object.assign(x, { status: 'expired', current_period_end: new Date().toISOString() }); return null; },
+    admin_list_subscriptions: (b, u) => (hasRole(u, 'manager') ? db.subscriptions.map((x) => { const who = users.find((y) => y.id === x.user_id) || {}; return { user_id: x.user_id, email: who.email, full_name: (db.profiles.find((pr) => pr.id === x.user_id) || {}).full_name || '', plan: x.plan, status: x.status, current_period_end: x.current_period_end, provider: x.provider, active: subOpen(x), updated_at: x.updated_at }; }) : []),
     admin_set_status: (b, u) => { if (!hasRole(u, 'manager', 'support')) throw new Error('not_allowed'); const o = db.orders.find((x) => x.id === b.p_id); o.status = b.p_status; o.history.push({ s: b.p_status, t: new Date().toISOString() }); if (b.p_status === 'delivered' && o.method === 'cod') o.paid = true; return o; },
   };
   const json = (route, status, body, headers = {}) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*', ...headers }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -195,6 +217,7 @@ export function makeMock() {
         const adminTables = ['products', 'categories', 'coupons', 'settings'];
         if (m === 'GET') {
           let r = sortRows(filt(visible(table, rows, u), url.searchParams), url.searchParams.get('order'));
+          if (url.searchParams.get('offset')) r = r.slice(+url.searchParams.get('offset'));
           if (url.searchParams.get('limit')) r = r.slice(0, +url.searchParams.get('limit'));
           return json(route, 200, single ? r[0] || null : r);
         }
@@ -202,13 +225,15 @@ export function makeMock() {
           const list = Array.isArray(body) ? body : [body];
           if ((adminTables.includes(table) || ['orders', 'conversations', 'conversation_messages', 'product_questions'].includes(table)) && !isAdmin(u)) return json(route, 403, { message: 'new row violates row-level security policy' });
           if (table === 'reviews' && !RPC.can_review({ p_product: list[0].product_id }, u)) return json(route, 403, { message: 'new row violates row-level security policy for table "reviews"' });
+          if (table === 'subscriptions' || (MIZAN.includes(table) && !subActive(u))) return json(route, 403, { code: '42501', message: `new row violates row-level security policy for table "${table}"` });
           const out = list.map((r) => {
             const row = { ...r };
-            if (['addresses', 'wishlist', 'reviews'].includes(table)) row.user_id = u;
+            if (['addresses', 'wishlist', 'reviews'].concat(MIZAN).includes(table)) row.user_id = u;
+            if (MIZAN.includes(table) && table !== 'mizan_books' && !row.id) { row.id = seq++; row.created_at = new Date().toISOString(); }
             if (table === 'reviews') { row.status = 'pending'; row.author = (db.profiles.find((p) => p.id === u) || {}).full_name || ''; row.created_at = new Date().toISOString(); }
             if (['products', 'addresses', 'reviews'].includes(table) && !row.id) row.id = seq++;
             if (table === 'products') Object.assign(row, { created_at: new Date().toISOString(), rating: row.rating || 0, reviews_count: row.reviews_count || 0 });
-            const keyCol = table === 'categories' ? 'id' : table === 'coupons' ? 'code' : table === 'wishlist' ? null : 'id';
+            const keyCol = table === 'categories' ? 'id' : table === 'coupons' ? 'code' : table === 'wishlist' ? null : table === 'mizan_books' ? 'user_id' : 'id';
             const existing = keyCol ? rows.find((x) => x[keyCol] === row[keyCol]) : rows.find((x) => x.user_id === row.user_id && x.product_id === row.product_id);
             if (existing) { if (!prefer.includes('ignore-duplicates')) Object.assign(existing, row); return existing; }
             rows.push(row); return row;
@@ -220,6 +245,7 @@ export function makeMock() {
           if (table === 'products' && !hasRole(u, 'manager', 'inventory')) return json(route, 200, single ? null : []);
           if (['settings', 'coupons', 'categories'].includes(table) && !hasRole(u, 'manager')) return json(route, 200, single ? null : []);
           const r = filt(visible(table, rows, u), url.searchParams);
+          if (MIZAN.includes(table) && single && r.length !== 1) return json(route, 406, { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' });
           r.forEach((x) => { const diff = {}; Object.keys(body).forEach((k) => { if (JSON.stringify(x[k]) !== JSON.stringify(body[k]) && !['images', 'description', 'data'].includes(k)) diff[k] = { from: x[k], to: body[k] }; }); if (table !== 'admin_notifications' && Object.keys(diff).length) audit(u, 'update', table, x.id || x.code, diff); Object.assign(x, body); });
           if (table === 'reviews') { const pid = r[0] && r[0].product_id; const ap = rows.filter((x) => x.product_id === pid && x.status === 'approved'); const p = db.products.find((x) => x.id === pid); if (p) { p.reviews_count = ap.length; p.rating = ap.length ? ap.reduce((s, x) => s + x.rating, 0) / ap.length : 0; } }
           return json(route, 200, prefer.includes('return=representation') ? (single ? r[0] : r) : undefined);
